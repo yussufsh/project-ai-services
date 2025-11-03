@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/project-ai-services/ai-services/cmd/ai-services/cmd/application/image"
+	"github.com/project-ai-services/ai-services/cmd/ai-services/cmd/application/model"
 )
 
 // ApplicationCmd represents the application command
@@ -20,4 +21,5 @@ func init() {
 	ApplicationCmd.AddCommand(deleteCmd)
 	ApplicationCmd.AddCommand(image.ImageCmd)
 	ApplicationCmd.AddCommand(stopCmd)
+	ApplicationCmd.AddCommand(model.ModelCmd)
 }
