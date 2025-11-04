@@ -14,6 +14,7 @@ type Runtime interface {
 	CreatePod(body io.Reader) (*types.KubePlayReport, error)
 	DeletePod(id string, force *bool) error
 	StopPod(id string) error
+	StartPod(id string) error
 	InspectContainer(nameOrId string) (*define.InspectContainerData, error)
 	ListContainers(filters map[string][]string) (any, error)
 }

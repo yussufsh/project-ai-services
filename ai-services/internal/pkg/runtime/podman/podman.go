@@ -155,3 +155,20 @@ func (pc *PodmanClient) StopPod(id string) error {
 
 	return nil
 }
+
+func (pc *PodmanClient) StartPod(id string) error {
+	_, err := pods.Start(pc.Context, id, &pods.StartOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to start the pod: %w", err)
+	}
+
+	return nil
+}
+
+func (pc *PodmanClient) InspectPod(nameOrID string) (*types.PodInspectReport, error) {
+	podInspectReport, err := pods.Inspect(pc.Context, nameOrID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect the pod: %w", err)
+	}
+	return podInspectReport, nil
+}

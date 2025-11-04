@@ -21,5 +21,6 @@ func init() {
 	ApplicationCmd.AddCommand(deleteCmd)
 	ApplicationCmd.AddCommand(image.ImageCmd)
 	ApplicationCmd.AddCommand(stopCmd)
+	ApplicationCmd.AddCommand(startCmd)
 	ApplicationCmd.AddCommand(model.ModelCmd)
 }
