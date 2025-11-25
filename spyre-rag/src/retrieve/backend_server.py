@@ -152,7 +152,13 @@ def chat_completion():
     except Exception as e:
         return jsonify({"error": repr(e)})
 
-    return Response(stream_with_context(query_vllm_stream(prompt, docs, llm_endpoint, llm_model, stop_words, max_tokens, temperature, stream, dynamic_chunk_truncation=TRUNCATION)),
+    resp_text = None
+    if docs:
+        resp_text = stream_with_context(query_vllm_stream(prompt, docs, llm_endpoint, llm_model, stop_words, max_tokens, temperature, stream, dynamic_chunk_truncation=TRUNCATION))
+    else:
+        resp_text = stream_with_context(stream_docs_not_found())
+
+    return Response(resp_text,
                     content_type='text/event-stream',
                     mimetype='text/event-stream', headers={
             'Cache-Control': 'no-cache',
@@ -175,6 +181,9 @@ def db_status():
     except Exception as e:
         return jsonify({"ready": False, "message": str(e)}), 500
 
+def stream_docs_not_found():
+    message = "No documents found in the knowledge base for this query."
+    yield f"data: {json.dumps({'choices': [{'delta': {'content': message}}]})}\n\n"
 
 if __name__ == "__main__":
     initialize_models()
