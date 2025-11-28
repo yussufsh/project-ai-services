@@ -18,7 +18,7 @@ env:
 jobs:
   build-publish-image:
     name: Build and Publish Image
-    runs-on: ubuntu-24.04-ppc64le
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -28,6 +28,21 @@ jobs:
         working-directory: images/minio
         run: |
           make build REGISTRY=${{ env.ICR_REGISTRY }}/${{ env.ICR_NAMESPACE }}
+      - name: List all images
+        run: |
+          podman images
+          echo 'saving image'
+          podman save > podman-image.tar $IMAGE_NAME
+        env:
+          IMAGE_NAME: ${{ env.ICR_REGISTRY }}/${{ env.ICR_NAMESPACE }}/minio:RELEASE.2025-10-15T17-29-55Z-2
+      - name: Trivy vulnerability scan
+        id: trivy
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          input: 'podman-image.tar'
+          format: table
+          severity: MEDIUM,HIGH,CRITICAL
+          docker-host: '/run/podman/podman.sock'
 
       - name: Publish minio image
         working-directory: images/minio
