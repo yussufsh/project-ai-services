@@ -32,7 +32,7 @@ import (
 var (
 	scheme = runtime.NewScheme()
 
-	// Singleton instances for all three clients, initialized together
+	// Singleton instances for all three clients, initialized together.
 	clientsOnce sync.Once
 	clientsErr  error
 
@@ -88,6 +88,7 @@ func initializeClients() error {
 		config, err := getKubeConfig()
 		if err != nil {
 			clientsErr = fmt.Errorf("failed to get openshift config: %w", err)
+
 			return
 		}
 
@@ -95,6 +96,7 @@ func initializeClients() error {
 		controllerRuntimeClient, err = client.New(config, client.Options{Scheme: scheme})
 		if err != nil {
 			clientsErr = fmt.Errorf("failed to create controller-runtime client: %w", err)
+
 			return
 		}
 
@@ -102,6 +104,7 @@ func initializeClients() error {
 		kubeClient, err = kubernetes.NewForConfig(config)
 		if err != nil {
 			clientsErr = fmt.Errorf("failed to create openshift clientset: %w", err)
+
 			return
 		}
 
@@ -109,6 +112,7 @@ func initializeClients() error {
 		routeClient, err = routeclient.NewForConfig(config)
 		if err != nil {
 			clientsErr = fmt.Errorf("failed to create openshift route clientset: %w", err)
+
 			return
 		}
 	})
