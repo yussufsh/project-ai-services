@@ -179,23 +179,32 @@ func (pc *PodmanClient) PodLogs(podNameOrID string) error {
 		return errors.New("pod name or ID cannot be empty")
 	}
 
-	ctx, cancel := context.WithCancel(pc.Context)
-	defer cancel()
-
-	//nolint:godox
-	// TODO: fetch pods logs via sdk way
-	cmdExec := exec.CommandContext(pc.Context, "podman", "pod", "logs", "-f", podNameOrID)
-	cmdExec.Stdout = os.Stdout
-	cmdExec.Stderr = os.Stderr
-
-	err := cmdExec.Run()
-
-	// If context was cancelled (Ctrl+C), don't treat it as an error
-	if ctx.Err() == context.Canceled {
-		return nil
+	podInspectReport, err := pods.Inspect(pc.Context, podNameOrID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to inspect the pod for logs: %w", err)
 	}
 
-	return err
+	for _, container := range podInspectReport.Containers {
+		if container.ID == podInspectReport.InfraContainerID {
+			continue
+		}
+
+		containerNameOrID := container.Name
+		if containerNameOrID == "" {
+			containerNameOrID = container.ID
+		}
+
+		logger.Infof("\n--- Following logs for container: %s ---\n", containerNameOrID)
+		if err := pc.ContainerLogs(containerNameOrID); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil
+			}
+
+			return fmt.Errorf("failed to fetch logs for container %s: %w", containerNameOrID, err)
+		}
+	}
+
+	return nil
 }
 
 func (pc *PodmanClient) PodExists(nameOrID string) (bool, error) {
