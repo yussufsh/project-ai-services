@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/containers/podman/v5/pkg/bindings"
@@ -179,10 +181,18 @@ func (pc *PodmanClient) PodLogs(podNameOrID string) error {
 		return errors.New("pod name or ID cannot be empty")
 	}
 
-	podInspectReport, err := pods.Inspect(pc.Context, podNameOrID, nil)
+	ctx, stop := signal.NotifyContext(pc.Context, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	podInspectReport, err := pods.Inspect(ctx, podNameOrID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to inspect the pod for logs: %w", err)
 	}
+
+	stdoutChan := make(chan string)
+	stderrChan := make(chan string)
+	errChan := make(chan error, len(podInspectReport.Containers))
+	var wg sync.WaitGroup
 
 	for _, container := range podInspectReport.Containers {
 		if container.ID == podInspectReport.InfraContainerID {
@@ -194,13 +204,85 @@ func (pc *PodmanClient) PodLogs(podNameOrID string) error {
 			containerNameOrID = container.ID
 		}
 
-		logger.Infof("\n--- Following logs for container: %s ---\n", containerNameOrID)
-		if err := pc.ContainerLogs(containerNameOrID); err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return nil
+		wg.Add(1)
+		go func(nameOrID string) {
+			defer wg.Done()
+
+			containerStdoutChan := make(chan string)
+			containerStderrChan := make(chan string)
+			containerDone := make(chan struct{})
+
+			go func() {
+				defer close(containerDone)
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case line, ok := <-containerStdoutChan:
+						if !ok {
+							containerStdoutChan = nil
+							if containerStdoutChan == nil && containerStderrChan == nil {
+								return
+							}
+							continue
+						}
+						stdoutChan <- fmt.Sprintf("[%s] %s", nameOrID, line)
+					case line, ok := <-containerStderrChan:
+						if !ok {
+							containerStderrChan = nil
+							if containerStdoutChan == nil && containerStderrChan == nil {
+								return
+							}
+							continue
+						}
+						stderrChan <- fmt.Sprintf("[%s] %s", nameOrID, line)
+					}
+				}
+			}()
+
+			opts := &containers.LogOptions{
+				Follow: utils.BoolPtr(true),
+				Stderr: utils.BoolPtr(true),
+				Stdout: utils.BoolPtr(true),
 			}
 
-			return fmt.Errorf("failed to fetch logs for container %s: %w", containerNameOrID, err)
+			err := containers.Logs(ctx, nameOrID, opts, containerStdoutChan, containerStderrChan)
+			<-containerDone
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !strings.Contains(err.Error(), "context canceled") {
+				errChan <- fmt.Errorf("failed to fetch logs for container %s: %w", nameOrID, err)
+			}
+		}(containerNameOrID)
+	}
+
+	go func() {
+		wg.Wait()
+		close(stdoutChan)
+		close(stderrChan)
+		close(errChan)
+	}()
+
+	for stdoutChan != nil || stderrChan != nil || errChan != nil {
+		select {
+		case <-ctx.Done():
+			return nil
+		case line, ok := <-stdoutChan:
+			if !ok {
+				stdoutChan = nil
+				continue
+			}
+			logger.Infoln(line)
+		case line, ok := <-stderrChan:
+			if !ok {
+				stderrChan = nil
+				continue
+			}
+			logger.Errorln(line)
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+				continue
+			}
+			return err
 		}
 	}
 
