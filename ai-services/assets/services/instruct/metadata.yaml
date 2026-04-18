@@ -1,0 +1,31 @@
+# Service identification
+id: instruct
+name: "Instruct"
+description: "Language model inference service for instruction-following tasks"
+version: "1.0.0"
+type: service
+
+# Certification and support
+certified_by: "IBM"
+
+# Service belongs to these architectures
+architectures:
+  - rag
+  - rag-cpu
+  - rag-dev
+
+# Dependencies on other services
+dependencies:
+  required: []
+  optional: []
+
+# Outputs/endpoints provided by this service
+endpoints:
+  - name: vllm
+    type: http
+    port: 8000
+    path: "/v1"
+    description: "OpenAI-compatible vLLM inference endpoint"
+    health_check: "/health"
+
+# Made with Bob

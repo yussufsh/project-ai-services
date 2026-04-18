@@ -1,0 +1,43 @@
+# Service identification
+id: chat
+name: "Question and Answer"
+description: "Answer questions in natural language by sourcing general & domain-specific knowledge"
+version: "1.0.0"
+type: service
+
+# Certification and support
+certified_by: "IBM"
+
+# Service belongs to these architectures
+architectures:
+  - rag
+  - rag-cpu
+  - rag-dev
+
+# Dependencies on other services
+dependencies:
+  required:
+    - id: opensearch
+      description: "For vector database storage and retrieval"
+    - id: embedding
+      description: "For text embedding generation"
+    - id: instruct
+      description: "For language model inference"
+    - id: reranker
+      description: "For result reranking"
+
+# Outputs/endpoints provided by this service
+endpoints:
+  - name: ui
+    type: http
+    port: 3000
+    description: "Chat UI"
+    health_check: "/"
+  
+  - name: backend
+    type: http
+    port: 5000
+    description: "Chat API (OpenAI-compatible)"
+    health_check: "/health"
+
+# Made with Bob

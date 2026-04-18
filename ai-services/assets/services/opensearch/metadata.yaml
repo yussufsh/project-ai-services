@@ -1,0 +1,37 @@
+# Service identification
+id: opensearch
+name: "OpenSearch"
+description: "Vector database for document storage and retrieval"
+version: "1.0.0"
+type: service
+
+# Certification and support
+certified_by: "IBM"
+
+# Service belongs to these architectures
+architectures:
+  - rag
+  - rag-cpu
+  - rag-dev
+
+# Dependencies on other services
+dependencies:
+  required: []
+  optional: []
+
+# Outputs/endpoints provided by this service
+endpoints:
+  - name: client
+    type: http
+    port: 9200
+    path: "/"
+    description: "OpenSearch client API endpoint"
+    health_check: "/_cluster/health"
+  
+  - name: metrics
+    type: http
+    port: 9600
+    path: "/"
+    description: "OpenSearch metrics endpoint"
+
+# Made with Bob

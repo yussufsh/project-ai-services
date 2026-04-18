@@ -1,0 +1,35 @@
+# Architecture identification
+id: rag
+name: "Digital Assistant"
+description: "Enable digital assistants using Retrieval-Augmented Generation (RAG), including AI services that query a managed knowledge base to answer questions from custom documents and data."
+version: "1.0.0"
+type: architecture
+
+# Certification and support
+certified_by: "IBM"
+supported_runtimes:
+  - podman
+  - openshift
+
+# Service composition
+services:
+  required:
+    - id: chat
+      version: ">=1.0.0"
+      description: "Question and answer service"
+      
+    - id: digitization
+      version: ">=1.0.0"
+      description: "Document digitization service"
+  
+  optional:
+    - id: summarization
+      version: ">=1.0.0"
+      description: "Document summarization service"
+
+# Links
+demo_link: "https://example.com/demo/rag"
+code_link: "https://github.com/project-ai-services/spyre-rag"
+documentation_link: "https://docs.example.com/rag"
+
+# Made with Bob

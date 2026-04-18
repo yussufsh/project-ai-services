@@ -1,0 +1,33 @@
+# Service identification
+id: summarization
+name: "Summarization"
+description: "Consolidates input text into a brief statement of main points"
+version: "1.0.0"
+type: service
+
+# Certification and support
+certified_by: "IBM"
+
+# Service belongs to these architectures
+architectures:
+  - rag
+  - rag-cpu
+  - rag-dev
+
+# Dependencies on other services
+dependencies:
+  required:
+    - id: instruct
+      description: "For language model inference"
+  optional: []
+
+# Outputs/endpoints provided by this service
+endpoints:
+  - name: api
+    type: http
+    port: 6000
+    path: "/summarize"
+    description: "Summarization API endpoint"
+    health_check: "/health"
+
+# Made with Bob

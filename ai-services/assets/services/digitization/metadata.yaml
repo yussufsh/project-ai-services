@@ -1,0 +1,43 @@
+# Service identification
+id: digitization
+name: "Digitize Documents"
+description: "Transforms documents such as manuals, invoices, and more into texts"
+version: "1.0.0"
+type: service
+
+# Certification and support
+certified_by: "IBM"
+
+# Service belongs to these architectures
+architectures:
+  - rag
+  - rag-cpu
+  - rag-dev
+
+# Dependencies on other services
+dependencies:
+  required:
+    - id: opensearch
+      description: "For document storage and retrieval"
+    - id: instruct
+      description: "For language model inference"
+    - id: embedding
+      description: "For document embeddings"
+
+# Outputs/endpoints provided by this service
+endpoints:
+  - name: api
+    type: http
+    port: 7000
+    path: "/digitize"
+    description: "Digitization API endpoint"
+    health_check: "/health"
+  
+  - name: ui
+    type: http
+    port: 7001
+    path: "/"
+    description: "Digitization UI"
+    health_check: "/"
+
+# Made with Bob

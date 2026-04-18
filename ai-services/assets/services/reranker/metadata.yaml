@@ -1,0 +1,31 @@
+# Service identification
+id: reranker
+name: "Reranker"
+description: "Document reranking service for improved search relevance"
+version: "1.0.0"
+type: service
+
+# Certification and support
+certified_by: "IBM"
+
+# Service belongs to these architectures
+architectures:
+  - rag
+  - rag-cpu
+  - rag-dev
+
+# Dependencies on other services
+dependencies:
+  required: []
+  optional: []
+
+# Outputs/endpoints provided by this service
+endpoints:
+  - name: vllm
+    type: http
+    port: 8002
+    path: "/v1"
+    description: "OpenAI-compatible reranking endpoint"
+    health_check: "/health"
+
+# Made with Bob
