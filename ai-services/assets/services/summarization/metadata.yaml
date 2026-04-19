@@ -14,12 +14,10 @@ architectures:
   - rag-cpu
   - rag-dev
 
-# Dependencies on other services
+# Dependencies on other services (version is optional, uses latest if not specified)
 dependencies:
-  required:
-    - id: instruct
-      description: "For language model inference"
-  optional: []
+  - id: instruct
+    version: ">=1.0.0"
 
 # Outputs/endpoints provided by this service
 endpoints:

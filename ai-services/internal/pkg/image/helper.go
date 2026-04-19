@@ -12,9 +12,8 @@ import (
 )
 
 // ListImages returns the list of images required for given application template.
-func ListImages(template, appName string) ([]string, error) {
-	tp := templates.NewEmbedTemplateProvider(templates.EmbedOptions{})
-
+// If tp is nil, it creates a default template provider for applications.
+func ListImages(template, appName string, tp templates.Template) ([]string, error) {
 	// fetch list of app templates
 	apps, err := tp.ListApplications(true)
 	if err != nil {

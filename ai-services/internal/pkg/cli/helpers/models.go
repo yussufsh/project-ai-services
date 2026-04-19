@@ -15,8 +15,7 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/vars"
 )
 
-func ListModels(template, appName string) ([]string, error) {
-	tp := templates.NewEmbedTemplateProvider(templates.EmbedOptions{})
+func ListModels(template, appName string, tp templates.Template) ([]string, error) {
 	tmpls, err := tp.LoadAllTemplates(template)
 	if err != nil {
 		return nil, fmt.Errorf("error loading templates for %s: %w", template, err)

@@ -11,21 +11,17 @@ supported_runtimes:
   - podman
   - openshift
 
-# Service composition
+# Service composition (version is optional, uses latest if not specified)
 services:
-  required:
-    - id: chat
-      version: ">=1.0.0"
-      description: "Question and answer service"
-      
-    - id: digitization
-      version: ">=1.0.0"
-      description: "Document digitization service"
+  - id: chat
+    version: ">=1.0.0"
+    
+  - id: digitization
+    version: ">=1.0.0"
   
-  optional:
-    - id: summarization
-      version: ">=1.0.0"
-      description: "Document summarization service"
+  - id: summarization
+    version: ">=1.0.0"
+    optional: true
 
 # Links
 demo_link: "https://example.com/demo/rag"

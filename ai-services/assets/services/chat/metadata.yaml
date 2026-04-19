@@ -14,17 +14,16 @@ architectures:
   - rag-cpu
   - rag-dev
 
-# Dependencies on other services
+# Dependencies on other services (version is optional, uses latest if not specified)
 dependencies:
-  required:
-    - id: opensearch
-      description: "For vector database storage and retrieval"
-    - id: embedding
-      description: "For text embedding generation"
-    - id: instruct
-      description: "For language model inference"
-    - id: reranker
-      description: "For result reranking"
+  - id: opensearch
+    version: ">=1.0.0"
+  - id: embedding
+    version: ">=1.0.0"
+  - id: instruct
+    version: ">=1.0.0"
+  - id: reranker
+    version: ">=1.0.0"
 
 # Outputs/endpoints provided by this service
 endpoints:

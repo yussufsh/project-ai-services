@@ -353,23 +353,22 @@ type EmbedOptions struct {
 
 // NewEmbedTemplateProvider creates a new instance of embedTemplateProvider.
 func NewEmbedTemplateProvider(options EmbedOptions) Template {
-	t := &embedTemplateProvider{}
-	if options.FS != nil {
-		t.fs = options.FS
-	} else {
+	t := &embedTemplateProvider{
+		fs:      options.FS,
+		root:    options.Root,
+		runtime: options.Runtime,
+	}
+	if t.fs == nil {
 		t.fs = &assets.ApplicationFS
 	}
 
-	if options.Root != "" {
-		t.root = options.Root
-	} else {
+	if t.root == "" {
 		t.root = "applications"
 	}
 
-	// Use Podman runtime if not set by default
-	t.runtime = types.RuntimeTypePodman
-	if options.Runtime != "" {
-		t.runtime = options.Runtime
+	// Use Podman runtime by default
+	if t.runtime == "" {
+		t.runtime = types.RuntimeTypePodman
 	}
 
 	return t

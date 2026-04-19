@@ -28,6 +28,7 @@ var (
 	templateName string
 	rawArgParams []string
 	argParams    map[string]string
+	useLegacy    bool // Flag to use legacy deployment method
 
 	// podman flags.
 	skipModelDownload     bool
@@ -42,10 +43,24 @@ var (
 
 var createCmd = &cobra.Command{
 	Use:   "create [name]",
-	Short: "Deploys an application",
-	Long: `Deploys an application with the provided application name based on the template
-		Arguments
+	Short: "Deploys an application, architecture, or service",
+	Long: `Deploys an application with the provided application name based on the template name.
+		Arguments:
 		- [name]: Application name (Required)
+		
+		Deployment Modes:
+		The system automatically detects whether the template is an architecture or service:
+		
+		1. Architecture Mode: If template matches an architecture name (e.g., 'rag')
+		   - Deploys all required and optional services for the architecture
+		   - Example: ai-services application create my-app --template rag
+		
+		2. Service Mode: If template matches a service name (e.g., 'chat', 'opensearch')
+		   - Deploys the service and all its dependencies
+		   - Example: ai-services application create my-app --template chat
+		
+		3. Legacy Mode: Use --legacy flag to use the old monolithic deployment
+		   - Example: ai-services application create my-app --template rag --legacy
 	`,
 	Args: cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
@@ -93,7 +108,15 @@ var createCmd = &cobra.Command{
 			Timeout:           timeout,
 		}
 
-		return app.Create(ctx, opts)
+		// Route based on deployment mode
+		if useLegacy {
+			// Legacy monolithic deployment
+			logger.Infof("Using legacy deployment mode for template '%s'\n", templateName)
+			return app.Create(ctx, opts)
+		}
+
+		// Use new unified Deploy method that auto-detects architecture vs service
+		return app.Deploy(ctx, opts)
 	},
 }
 
@@ -123,8 +146,20 @@ func initCreateCommonFlags() {
 	skipCheckDesc := appBootstrap.BuildSkipFlagDescription()
 	createCmd.Flags().StringSliceVar(&skipChecks, appFlags.Create.SkipValidation, []string{}, skipCheckDesc)
 
-	createCmd.Flags().StringVarP(&templateName, appFlags.Create.Template, "t", "", "Application template to use (required)")
+	createCmd.Flags().StringVarP(&templateName, appFlags.Create.Template, "t", "",
+		"Template name - can be an architecture, service, or legacy application template.\n"+
+			"The system automatically detects the type:\n"+
+			"  - Architecture: Deploys all services (e.g., 'rag')\n"+
+			"  - Service: Deploys service + dependencies (e.g., 'chat', 'opensearch')\n"+
+			"  - Legacy: Falls back to monolithic deployment if not found\n"+
+			"Required.")
 	_ = createCmd.MarkFlagRequired(appFlags.Create.Template)
+
+	// Legacy deployment flag
+	createCmd.Flags().BoolVar(&useLegacy, "legacy", false,
+		"Force legacy monolithic deployment mode.\n"+
+			"Use this to deploy using the old application template structure.\n"+
+			"Example: --template rag --legacy")
 
 	createCmd.Flags().StringSliceVar(
 		&rawArgParams,

@@ -12,6 +12,9 @@ type Application interface {
 	// Create deploys a new application based on a template.
 	Create(ctx context.Context, opts types.CreateOptions) error
 
+	// Deploy deploys either an architecture or service based on auto-detection.
+	Deploy(ctx context.Context, opts types.CreateOptions) error
+
 	// Delete removes an application and its associated resources.
 	Delete(ctx context.Context, opts types.DeleteOptions) error
 

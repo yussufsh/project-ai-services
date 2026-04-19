@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
 )
@@ -27,6 +28,7 @@ type ImagePull struct {
 	Runtime          runtime.Runtime
 	Policy           ImagePullPolicy
 	App, AppTemplate string
+	TemplateProvider templates.Template // Optional: if provided, uses this instead of creating default
 }
 
 // NewImagePull factory method to return ImagePull object.
@@ -56,7 +58,7 @@ func (p ImagePull) Run() error {
 // always -> pulls all the images for a given app template.
 func (p ImagePull) always() error {
 	// Fetch all images required for a given template
-	images, err := ListImages(p.AppTemplate, p.App)
+	images, err := ListImages(p.AppTemplate, p.App, p.TemplateProvider)
 	if err != nil {
 		return fmt.Errorf("failed to list container images: %w", err)
 	}
@@ -71,7 +73,7 @@ func (p ImagePull) always() error {
 // ifNotPresent -> pulls only the missing images for a given app template.
 func (p ImagePull) ifNotPresent() error {
 	// Fetch all images required for a given template
-	images, err := ListImages(p.AppTemplate, p.App)
+	images, err := ListImages(p.AppTemplate, p.App, p.TemplateProvider)
 	if err != nil {
 		return fmt.Errorf("failed to list container images: %w", err)
 	}
@@ -90,7 +92,7 @@ func (p ImagePull) ifNotPresent() error {
 // It checks whether all the images for given appTemplate is present locally, if not then raises an error.
 func (p ImagePull) never() error {
 	// Fetch all images required for a given template
-	images, err := ListImages(p.AppTemplate, p.App)
+	images, err := ListImages(p.AppTemplate, p.App, p.TemplateProvider)
 	if err != nil {
 		return fmt.Errorf("failed to list container images: %w", err)
 	}
