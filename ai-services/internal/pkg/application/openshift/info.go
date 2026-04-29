@@ -7,6 +7,7 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/application/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/helpers"
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
+	"github.com/project-ai-services/ai-services/internal/pkg/constants"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/vars"
 )
@@ -45,12 +46,15 @@ func (o *OpenshiftApplication) Info(opts types.InfoOptions) error {
 	// Step3: Read and print the info.md file
 	tp := templates.NewEmbedTemplateProvider(&assets.ApplicationFS)
 
+	logger.Infoln(constants.InfoTitle + ":")
+	logger.Infoln("-------")
 	if err := helpers.PrintInfo(tp, o.runtime, opts.Name, appTemplate); err != nil {
 		// not failing if overall info command, if we cannot display Info
 		logger.Errorf("failed to display info: %v\n", err)
 
 		return nil
 	}
+	logger.Infoln("")
 
 	return nil
 }

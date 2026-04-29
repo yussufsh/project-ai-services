@@ -13,6 +13,7 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/helpers"
 	clipodman "github.com/project-ai-services/ai-services/internal/pkg/cli/podman"
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
+	"github.com/project-ai-services/ai-services/internal/pkg/constants"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/podman"
 	"github.com/project-ai-services/ai-services/internal/pkg/specs"
@@ -78,10 +79,13 @@ func DeployCatalog(ctx context.Context, podmanURI, passwordHash string, argParam
 	logger.Infoln("-------")
 
 	// Print next steps similar to application create
+	logger.Infoln(constants.NextStepsTitle + ":")
+	logger.Infoln("-------")
 	if err := helpers.PrintNextSteps(tp, rt, catalogAppName, catalogAppTemplate); err != nil {
 		// do not want to fail the overall configure if we cannot print next steps
 		logger.Infof("failed to display next steps: %v\n", err)
 	}
+	logger.Infoln("")
 
 	return nil
 }
@@ -91,8 +95,8 @@ func loadCatalogTemplates(s *spinner.Spinner) (templates.Template, *templates.Ap
 	tp := templates.NewEmbedTemplateProvider(&assets.CatalogFS, "")
 
 	// Load metadata from catalog/podman
-	appMetadata, err := tp.LoadMetadata(catalogAppTemplate, true)
-	if err != nil {
+	var appMetadata templates.AppMetadata
+	if err := tp.LoadMetadata(catalogAppTemplate, true, &appMetadata); err != nil {
 		s.Fail("failed to load catalog metadata")
 
 		return nil, nil, nil, fmt.Errorf("failed to load catalog metadata: %w", err)
@@ -106,7 +110,7 @@ func loadCatalogTemplates(s *spinner.Spinner) (templates.Template, *templates.Ap
 		return nil, nil, nil, fmt.Errorf("failed to load catalog templates: %w", err)
 	}
 
-	return tp, appMetadata, tmpls, nil
+	return tp, &appMetadata, tmpls, nil
 }
 
 // prepareCatalogValues prepares the values map with configure-specific configuration.

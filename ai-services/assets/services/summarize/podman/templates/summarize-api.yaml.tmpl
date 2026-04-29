@@ -1,3 +1,7 @@
+{{- $instructService := "instruct" }}
+{{- if index . "instruct-cpu" }}
+  {{- $instructService = "instruct-cpu" }}
+{{- end }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -29,7 +33,7 @@ spec:
         - name: PORT
           value: "6000"
         - name: LLM_ENDPOINT
-          value: "http://{{ .AppName  }}--instruct:8000"
+          value: "http://{{ .AppName }}--{{ $instructService }}:8000"
         - name: LLM_MODEL
           value: "ibm-granite/granite-3.3-8b-instruct"
         - name: LOG_LEVEL

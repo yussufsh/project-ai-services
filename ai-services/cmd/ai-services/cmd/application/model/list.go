@@ -9,8 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var templateName string
-
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List models for a given application template",
@@ -38,10 +36,17 @@ func list(cmd *cobra.Command) error {
 		return nil
 	}
 
-	models, err := models(templateName)
+	models, err := getModels(templateName)
 	if err != nil {
-		return fmt.Errorf("failed to list the models, err: %w", err)
+		return fmt.Errorf("failed to list the models: %w", err)
 	}
+
+	if len(models) == 0 {
+		logger.Infof("No models found for template '%s'\n", templateName)
+
+		return nil
+	}
+
 	logger.Infoln("Models in application template " + templateName + ":")
 	for _, model := range models {
 		logger.Infoln("- " + model)

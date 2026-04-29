@@ -3,7 +3,6 @@ package image
 import (
 	"fmt"
 
-	"github.com/project-ai-services/ai-services/internal/pkg/image"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/vars"
@@ -31,10 +30,7 @@ func list(templateName string) error {
 		return nil
 	}
 
-	img := &image.Images{
-		AppTemplate: templateName,
-	}
-	images, err := img.ListImages()
+	images, err := listImages(templateName)
 	if err != nil {
 		return fmt.Errorf("error listing images: %w", err)
 	}

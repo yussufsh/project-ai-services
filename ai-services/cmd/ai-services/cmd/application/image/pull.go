@@ -3,7 +3,6 @@ package image
 import (
 	"fmt"
 
-	"github.com/project-ai-services/ai-services/internal/pkg/image"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/podman"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
@@ -13,9 +12,14 @@ import (
 
 var pullCmd = &cobra.Command{
 	Use:   "pull",
-	Short: "Pulls all container images for a given application template",
-	Long:  ``,
-	Args:  cobra.MaximumNArgs(0),
+	Short: "Pulls all container images for a given application, architecture, or service template",
+	Long: `Pull all container images required for the specified template.
+	
+	Supports three modes:
+	1. Architecture Mode: Pulls images for all services in the architecture
+	2. Service Mode: Pulls images for the service and its dependencies
+	3. Legacy Mode: Pulls images for legacy application templates (use --legacy flag)`,
+	Args: cobra.MaximumNArgs(0),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Once precheck passes, silence usage for any *later* internal errors.
 		cmd.SilenceUsage = true
@@ -32,10 +36,7 @@ func pull(template string) error {
 		return nil
 	}
 
-	img := &image.Images{
-		AppTemplate: template,
-	}
-	images, err := img.ListImages()
+	images, err := listImages(template)
 	if err != nil {
 		return fmt.Errorf("error listing images: %w", err)
 	}

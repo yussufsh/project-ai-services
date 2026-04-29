@@ -1,5 +1,101 @@
 basePath: /api/v1
 definitions:
+  github_com_project-ai-services_ai-services_internal_pkg_catalog_types.Architecture:
+    properties:
+      certified_by:
+        type: string
+      code_link:
+        type: string
+      demo_link:
+        type: string
+      description:
+        type: string
+      documentation_link:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      services:
+        items:
+          $ref: '#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ServiceReference'
+        type: array
+      supported_runtimes:
+        items:
+          type: string
+        type: array
+      type:
+        description: '"architecture"'
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_project-ai-services_ai-services_internal_pkg_catalog_types.DependencyReference:
+    properties:
+      id:
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ResourceRequirements:
+    properties:
+      min_cpu:
+        type: string
+      min_disk:
+        type: string
+      min_memory:
+        type: string
+      min_spyre:
+        description: Number of Spyre cards required
+        type: integer
+    type: object
+  github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ServiceReference:
+    properties:
+      id:
+        type: string
+      optional:
+        type: boolean
+      version:
+        type: string
+    type: object
+  github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ServiceSummary:
+    properties:
+      architectures:
+        items:
+          type: string
+        type: array
+      certified_by:
+        type: string
+      dependencies:
+        items:
+          $ref: '#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.DependencyReference'
+        type: array
+      dependency_only:
+        type: boolean
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      requirements:
+        allOf:
+        - $ref: '#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ResourceRequirements'
+        description: Runtime-specific resource requirements
+      supported_runtimes:
+        items:
+          type: string
+        type: array
+      type:
+        type: string
+      version:
+        type: string
+    type: object
+  internal_pkg_catalog_apiserver_handlers.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
   internal_pkg_catalog_apiserver_handlers.loginReq:
     properties:
       password:
@@ -228,6 +324,64 @@ paths:
       summary: List application templates
       tags:
       - Applications
+  /architectures:
+    get:
+      description: Retrieves a list of all available architecture templates
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.Architecture'
+            type: array
+        "401":
+          description: Unauthorized - Invalid or missing access token
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List available architectures
+      tags:
+      - Catalog
+  /architectures/{id}:
+    get:
+      description: Retrieves detailed information about a specific architecture template
+      parameters:
+      - description: Architecture template ID (e.g., 'rag')
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.Architecture'
+        "401":
+          description: Unauthorized - Invalid or missing access token
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "404":
+          description: Architecture not found
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get architecture details
+      tags:
+      - Catalog
   /auth/login:
     post:
       consumes:
@@ -348,6 +502,101 @@ paths:
       summary: Refresh access token
       tags:
       - Authentication
+  /services:
+    get:
+      description: Retrieves a list of all deployable service templates. Dependency-only
+        services are excluded from this list.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ServiceSummary'
+            type: array
+        "401":
+          description: Unauthorized - Invalid or missing access token
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List available services
+      tags:
+      - Catalog
+  /services/{id}:
+    get:
+      description: Retrieves detailed information about a specific service template
+      parameters:
+      - description: Service template ID (e.g., 'summarize')
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_project-ai-services_ai-services_internal_pkg_catalog_types.ServiceSummary'
+        "401":
+          description: Unauthorized - Invalid or missing access token
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "404":
+          description: Service not found
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get service details
+      tags:
+      - Catalog
+  /services/{id}/params:
+    get:
+      description: Retrieves custom parameters schema for a specific service template.
+        Returns JSON Schema format that UI can use to generate dynamic forms with
+        validation.
+      parameters:
+      - description: Service template ID (e.g., 'rag', 'summarize')
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: JSON Schema for service parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - Invalid or missing access token
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "404":
+          description: Service not found
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_pkg_catalog_apiserver_handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get service custom parameters
+      tags:
+      - Catalog
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.
@@ -360,3 +609,5 @@ tags:
   name: Authentication
 - description: Application management endpoints
   name: Applications
+- description: Catalog endpoints for architectures and services
+  name: Catalog

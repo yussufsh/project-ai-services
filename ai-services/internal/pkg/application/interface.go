@@ -4,13 +4,20 @@ import (
 	"context"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/application/types"
+	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
 	runtimeTypes "github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 )
 
 // Application defines the interface for application lifecycle management operations.
 type Application interface {
+	// SetTemplateProvider sets the template provider for the application.
+	SetTemplateProvider(tp templates.Template)
+
 	// Create deploys a new application based on a template.
 	Create(ctx context.Context, opts types.CreateOptions) error
+
+	// Deploy deploys either an architecture or service based on auto-detection.
+	Deploy(ctx context.Context, opts types.CreateOptions) error
 
 	// Delete removes an application and its associated resources.
 	Delete(ctx context.Context, opts types.DeleteOptions) error

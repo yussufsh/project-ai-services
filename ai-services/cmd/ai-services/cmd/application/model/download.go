@@ -40,10 +40,16 @@ func download(cmd *cobra.Command) error {
 		return nil
 	}
 
-	models, err := models(templateName)
+	models, err := getModels(templateName)
 	if err != nil {
 		return err
 	}
+
+	if len(models) == 0 {
+		logger.Infof("No models found for template '%s'\n", templateName)
+		return nil
+	}
+
 	logger.Infoln("Downloaded Models in application template" + templateName + ":")
 	for _, model := range models {
 		err := helpers.DownloadModel(model, vars.ModelDirectory)

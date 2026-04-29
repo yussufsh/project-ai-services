@@ -10,8 +10,10 @@ certified_by: "IBM"
 # Service belongs to these architectures
 architectures:
   - rag
+  - rag-dev
 
 # Dependencies on other services (version is optional, uses latest if not specified)
+# Note: When cpu=true, the system will automatically append '-cpu' suffix to instruct and reranker dependencies
 dependencies:
   - id: opensearch
     version: ">=1.0.0"

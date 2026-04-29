@@ -11,9 +11,11 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/application/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/helpers"
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
+	"github.com/project-ai-services/ai-services/internal/pkg/constants"
 	"github.com/project-ai-services/ai-services/internal/pkg/helm"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/spinner"
+	"github.com/project-ai-services/ai-services/internal/pkg/vars"
 )
 
 func (o *OpenshiftApplication) Create(ctx context.Context, opts types.CreateOptions) error {
@@ -47,12 +49,16 @@ func (o *OpenshiftApplication) Create(ctx context.Context, opts types.CreateOpti
 	logger.Infoln("-------")
 
 	// Step5: Print the next steps to be performed at the end of create
+	logger.Infoln(constants.NextStepsTitle + ":")
+	logger.Infoln("-------")
 	if err := helpers.PrintNextSteps(tp, o.runtime, opts.Name, opts.TemplateName); err != nil {
 		// do not want to fail the overall create if we cannot print next steps
 		logger.Infof("failed to display next steps: %v\n", err)
 
 		return nil //nolint:nilerr // intentionally swallow error for non-critical step
 	}
+	logger.Infof("- Run \"ai-services application info %s --runtime %s\" to view service endpoints.", opts.Name, vars.RuntimeFactory.GetRuntimeType().String())
+	logger.Infoln("")
 
 	return nil
 }
@@ -65,8 +71,8 @@ func getOperationTimeout(ctx context.Context, tp templates.Template, opts types.
 	// populate the operation timeout if its either not set or set negatively
 	if timeout <= 0 {
 		// load metadata.yml to read the app metadata
-		appMetadata, err := tp.LoadMetadata(opts.TemplateName, false)
-		if err != nil {
+		var appMetadata templates.AppMetadata
+		if err := tp.LoadMetadata(opts.TemplateName, false, &appMetadata); err != nil {
 			s.Fail("failed to read the app metadata")
 
 			return 0, fmt.Errorf("failed to read the app metadata: %w", err)

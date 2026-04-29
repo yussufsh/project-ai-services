@@ -13,6 +13,9 @@ const (
 	DSCKind              = "DataScienceCluster"
 	DSCIKind             = "DSCInitialization"
 	SMTLevel             = 2
+
+	NextStepsTitle = "Next Steps"
+	InfoTitle      = "Info"
 )
 
 // OperatorConfig defines configuration for an operator.

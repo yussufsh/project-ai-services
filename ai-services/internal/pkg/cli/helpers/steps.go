@@ -14,15 +14,12 @@ import (
 
 const (
 	nextStepsMDFile = "next.md"
-	nextStepsTitle  = "Next Steps"
-
-	infoMDFile = "info.md"
-	infoTitle  = "Info"
+	infoMDFile      = "info.md"
 )
 
 func PrintNextSteps(tp templates.Template, runtime runtime.Runtime, app, appTemplate string) error {
 	params := map[string]string{"AppName": app}
-	if err := renderStepsMarkdown(tp, runtime, appTemplate, params, nextStepsMDFile, nextStepsTitle); err != nil {
+	if err := renderStepsMarkdown(tp, runtime, appTemplate, params, nextStepsMDFile); err != nil {
 		logger.Infof("Unable to load steps: %v\n", err)
 
 		return nil
@@ -33,7 +30,7 @@ func PrintNextSteps(tp templates.Template, runtime runtime.Runtime, app, appTemp
 
 func PrintInfo(tp templates.Template, runtime runtime.Runtime, app, appTemplate string) error {
 	params := map[string]string{"AppName": app}
-	if err := renderStepsMarkdown(tp, runtime, appTemplate, params, infoMDFile, infoTitle); err != nil {
+	if err := renderStepsMarkdown(tp, runtime, appTemplate, params, infoMDFile); err != nil {
 		logger.Infof("Unable to load steps: %v\n", err)
 
 		return nil
@@ -172,7 +169,7 @@ func fetchDataSpecificInfo(data any, format string, defaultValue *string) (strin
 	return strings.TrimSpace(result.String()), nil
 }
 
-func renderStepsMarkdown(tp templates.Template, runtime runtime.Runtime, appTemplate string, params map[string]string, mdFile, title string) error {
+func renderStepsMarkdown(tp templates.Template, runtime runtime.Runtime, appTemplate string, params map[string]string, mdFile string) error {
 	tmpls, err := tp.LoadMdFiles(appTemplate)
 	if err != nil {
 		return nil
@@ -207,11 +204,7 @@ func renderStepsMarkdown(tp templates.Template, runtime runtime.Runtime, appTemp
 	if err := tmpl.Execute(&rendered, params); err != nil {
 		return fmt.Errorf("failed to execute info.md: %w", err)
 	}
-
-	logger.Infoln(title + ":")
-	logger.Infoln("-------")
 	logger.Infoln(rendered.String())
-	logger.Infoln("") // Add Empty line after printing steps
 
 	return nil
 }

@@ -1,7 +1,19 @@
+{{- $podSuffix := "chat-bot" }}
+{{- $instructService := "instruct" }}
+{{- $rerankerService := "reranker" }}
+{{- if or (index . "instruct-cpu") (index . "reranker-cpu") }}
+  {{- $podSuffix = "chat-bot-dev" }}
+{{- end }}
+{{- if index . "instruct-cpu" }}
+  {{- $instructService = "instruct-cpu" }}
+{{- end }}
+{{- if index . "reranker-cpu" }}
+  {{- $rerankerService = "reranker-cpu" }}
+{{- end }}
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ .AppName }}--chat-bot"
+  name: "{{ .AppName }}--{{ $podSuffix }}"
   labels:
     ai-services.io/application: "{{ .AppName }}"
     ai-services.io/template: "{{ .AppTemplateName }}"
@@ -19,9 +31,9 @@ spec:
           memory: "512Mi"
       env:
         - name: BACKEND_HOST
-          value: "{{ .AppName  }}--chat-bot"
+          value: "{{ .AppName  }}--{{ $podSuffix }}"
         - name: BACKEND_PORT
-          value: "5000" 
+          value: "5000"
       ports:
         - containerPort: 3000
           protocol: TCP
@@ -56,11 +68,11 @@ spec:
         - name: EMB_MAX_TOKENS
           value: "512"
         - name: LLM_ENDPOINT
-          value: "http://{{ .AppName  }}--instruct:8000"
+          value: "http://{{ .AppName  }}--{{ $instructService }}:8000"
         - name: LLM_MODEL
           value: "ibm-granite/granite-3.3-8b-instruct"
         - name: RERANKER_ENDPOINT
-          value: "http://{{ .AppName  }}--reranker:8002"
+          value: "http://{{ .AppName  }}--{{ $rerankerService }}:8002"
         - name: RERANKER_MODEL
           value: "BAAI/bge-reranker-v2-m3"
         - name: OPENSEARCH_HOST

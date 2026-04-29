@@ -33,25 +33,25 @@ var (
 func (p *PodmanApplication) Create(ctx context.Context, opts types.CreateOptions) error {
 	// Proceed to create application
 	logger.Infof("Creating application '%s' using template '%s'\n", opts.Name, opts.TemplateName)
-	tp := templates.NewEmbedTemplateProvider(&assets.ApplicationFS)
+	p.SetTemplateProvider(templates.NewEmbedTemplateProvider(&assets.ApplicationFS))
 
 	// validate whether the provided template name is correct
-	if err := tp.AppTemplateExist(opts.TemplateName); err != nil {
+	if err := p.templateProvider.AppTemplateExist(opts.TemplateName); err != nil {
 		return err
 	}
 
-	tmpls, err := tp.LoadAllTemplates(opts.TemplateName)
+	tmpls, err := p.templateProvider.LoadAllTemplates(opts.TemplateName)
 	if err != nil {
 		return fmt.Errorf("failed to parse the templates: %w", err)
 	}
 
 	// load metadata.yml to read the app metadata
-	appMetadata, err := tp.LoadMetadata(opts.TemplateName, true)
-	if err != nil {
+	var appMetadata templates.AppMetadata
+	if err := p.templateProvider.LoadMetadata(opts.TemplateName, true, &appMetadata); err != nil {
 		return fmt.Errorf("failed to read the app metadata: %w", err)
 	}
 
-	if err := p.verifyPodTemplateExists(tmpls, appMetadata); err != nil {
+	if err := p.verifyPodTemplateExists(tmpls, &appMetadata); err != nil {
 		return fmt.Errorf("failed to verify pod template: %w", err)
 	}
 
@@ -81,13 +81,12 @@ func (p *PodmanApplication) Create(ctx context.Context, opts types.CreateOptions
 	// Loop through all pod templates, render and run kube play
 	logger.Infof("Total Pod Templates to be processed: %d\n", len(tmpls))
 
-	return p.deployApplication(ctx, opts, tmpls, appMetadata, pciAddresses)
+	return p.deployApplication(ctx, opts, tmpls, &appMetadata, pciAddresses)
 }
 
 func (p *PodmanApplication) validateAndAllocateSpyreCards(templateName, appName string, tmpls map[string]*template.Template) ([]string, error) {
-	tp := templates.NewEmbedTemplateProvider(&assets.ApplicationFS)
 
-	reqSpyreCardsCount, err := p.calculateReqSpyreCards(tp, utils.ExtractMapKeys(tmpls), templateName, appName)
+	reqSpyreCardsCount, err := p.calculateReqSpyreCards(utils.ExtractMapKeys(tmpls), templateName, appName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculateReqSpyreCards: %w", err)
 	}
@@ -97,6 +96,10 @@ func (p *PodmanApplication) validateAndAllocateSpyreCards(templateName, appName 
 	}
 
 	// calculate the actual available spyre cards
+	return allocateSpyreCards(p, reqSpyreCardsCount)
+}
+
+func allocateSpyreCards(p *PodmanApplication, reqSpyreCardsCount int) ([]string, error) {
 	pciAddresses, err := helpers.FindFreeSpyreCards()
 	if err != nil {
 		return nil, fmt.Errorf("failed to find free Spyre Cards: %w", err)
@@ -139,10 +142,8 @@ func (p *PodmanApplication) deployApplication(ctx context.Context, opts types.Cr
 		return fmt.Errorf("failed while checking existing pods for application: %w", err)
 	}
 
-	tp := templates.NewEmbedTemplateProvider(&assets.ApplicationFS)
-
 	// execute the pod Templates
-	if err := p.executePodTemplates(tp, opts.Name, appMetadata, tmpls, pciAddresses, existingPods, opts.ValuesFiles, opts.ArgParams); err != nil {
+	if err := p.executePodTemplates(opts.Name, appMetadata, tmpls, pciAddresses, existingPods, opts.ValuesFiles, opts.ArgParams); err != nil {
 		return err
 	}
 
@@ -151,12 +152,16 @@ func (p *PodmanApplication) deployApplication(ctx context.Context, opts types.Cr
 	logger.Infoln("-------")
 
 	// print the next steps to be performed at the end of create
-	if err := helpers.PrintNextSteps(tp, p.runtime, opts.Name, opts.TemplateName); err != nil {
+	logger.Infoln(constants.NextStepsTitle + ":")
+	logger.Infoln("-------")
+	if err := helpers.PrintNextSteps(p.templateProvider, p.runtime, opts.Name, opts.TemplateName); err != nil {
 		// do not want to fail the overall create if we cannot print next steps
 		logger.Infof("failed to display next steps: %v\n", err)
 
 		return nil //nolint:nilerr // intentionally swallow error for non-critical step
 	}
+	logger.Infof("- Run \"ai-services application info %s --runtime %s\" to view service endpoints.\n\n", opts.Name, vars.RuntimeFactory.GetRuntimeType().String())
+	logger.Infoln("")
 
 	return nil
 }
@@ -165,7 +170,7 @@ func (p *PodmanApplication) downloadModels(ctx context.Context, templateName, ap
 	s := spinner.New("Downloading models as part of application creation...")
 	s.Start(ctx)
 
-	models, err := helpers.ListModels(templateName, appName)
+	models, err := helpers.ListModels(templateName, appName, p.templateProvider)
 	if err != nil {
 		s.Fail("failed to list models")
 
@@ -216,13 +221,13 @@ func (p *PodmanApplication) validateSpyreCardRequirements(req int, actual int) e
 	return nil
 }
 
-func (p *PodmanApplication) calculateReqSpyreCards(tp templates.Template, podTemplateFileNames []string, appTemplateName, appName string) (int, error) {
+func (p *PodmanApplication) calculateReqSpyreCards(podTemplateFileNames []string, appTemplateName, appName string) (int, error) {
 	totalReqSpyreCounts := 0
 
 	// Calculate Req Spyre Counts
 	for _, podTemplateFileName := range podTemplateFileNames {
 		// fetch pod spec
-		podSpec, err := p.fetchPodSpec(tp, appTemplateName, podTemplateFileName, appName, nil, nil)
+		podSpec, err := p.fetchPodSpec(appTemplateName, podTemplateFileName, appName, nil, nil)
 		if err != nil {
 			return totalReqSpyreCounts, fmt.Errorf("failed to load pod Template: '%s' for appTemplate: '%s' with error: %w", podTemplateFileName, appTemplateName, err)
 		}
@@ -251,8 +256,8 @@ func (p *PodmanApplication) calculateReqSpyreCards(tp templates.Template, podTem
 	return totalReqSpyreCounts, nil
 }
 
-func (p *PodmanApplication) fetchPodSpec(tp templates.Template, appTemplateName, podTemplateFileName, appName string, valuesFiles []string, argParams map[string]string) (*models.PodSpec, error) {
-	podSpec, err := tp.LoadPodTemplateWithValues(appTemplateName, podTemplateFileName, appName, valuesFiles, argParams)
+func (p *PodmanApplication) fetchPodSpec(appTemplateName, podTemplateFileName, appName string, valuesFiles []string, argParams map[string]string) (*models.PodSpec, error) {
+	podSpec, err := p.templateProvider.LoadPodTemplateWithValues(appTemplateName, podTemplateFileName, appName, valuesFiles, argParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pod Template: '%s' for appTemplate: '%s' with error: %w", podTemplateFileName, appTemplateName, err)
 	}
@@ -292,20 +297,21 @@ func (p *PodmanApplication) fetchSpyreCardsFromPodAnnotations(annotations map[st
 func (p *PodmanApplication) downloadImagesForTemplate(templateName, appName string, imagePullPolicy image.ImagePullPolicy) error {
 	// create Images struct and run with the specified policy
 	img := &image.Images{
-		Runtime:     p.runtime,
-		App:         appName,
-		AppTemplate: templateName,
+		Runtime:          p.runtime,
+		App:              appName,
+		AppTemplate:      templateName,
+		TemplateProvider: p.templateProvider,
 	}
 
 	return img.Run(imagePullPolicy)
 }
 
-func (p *PodmanApplication) executePodTemplates(tp templates.Template,
+func (p *PodmanApplication) executePodTemplates(
 	appName string, appMetadata *templates.AppMetadata,
 	tmpls map[string]*template.Template, pciAddresses []string, existingPods []string,
 	valuesFiles []string, argParams map[string]string) error {
 	// Load values for template rendering
-	values, err := tp.LoadValues(appMetadata.Name, valuesFiles, argParams)
+	values, err := p.templateProvider.LoadValues(appMetadata.Name, valuesFiles, argParams)
 	if err != nil {
 		return fmt.Errorf("failed to load params for application: %w", err)
 	}
@@ -332,7 +338,7 @@ func (p *PodmanApplication) executePodTemplates(tp templates.Template,
 			wg.Add(1)
 			go func(t string) {
 				defer wg.Done()
-				if err := p.executePodTemplateLayer(tp, tmpls, globalParams, pciAddresses, existingPods, podTemplateName, appName, valuesFiles, argParams); err != nil {
+				if err := p.executePodTemplateLayer(tmpls[t], globalParams, pciAddresses, existingPods, appName, valuesFiles, argParams); err != nil {
 					errCh <- err
 				}
 			}(podTemplateName)
@@ -358,16 +364,17 @@ func (p *PodmanApplication) executePodTemplates(tp templates.Template,
 	return nil
 }
 
-func (p *PodmanApplication) executePodTemplateLayer(tp templates.Template, tmpls map[string]*template.Template,
-	globalParams map[string]any, pciAddresses []string, existingPods []string, podTemplateName, appName string,
+func (p *PodmanApplication) executePodTemplateLayer(podTemplate *template.Template,
+	globalParams map[string]any, pciAddresses []string, existingPods []string, appName string,
 	valuesFiles []string, argParams map[string]string) error {
+	podTemplateName := podTemplate.Name()
 	logger.Infof("'%s': Processing template...\n", podTemplateName)
 
 	// Shallow Copy globalParams Map
 	params := utils.CopyMap(globalParams)
 
 	// fetch pod Spec
-	podSpec, err := p.fetchPodSpec(tp, globalParams["AppTemplateName"].(string), podTemplateName, appName, valuesFiles, argParams)
+	podSpec, err := p.fetchPodSpec(globalParams["AppTemplateName"].(string), podTemplateName, appName, valuesFiles, argParams)
 	if err != nil {
 		return err
 	}
@@ -387,8 +394,6 @@ func (p *PodmanApplication) executePodTemplateLayer(tp templates.Template, tmpls
 		return fmt.Errorf("'%s': Failed to fetch env params: %w", podTemplateName, err)
 	}
 	params["env"] = env
-
-	podTemplate := tmpls[podTemplateName]
 
 	var rendered bytes.Buffer
 	if err := podTemplate.Execute(&rendered, params); err != nil {

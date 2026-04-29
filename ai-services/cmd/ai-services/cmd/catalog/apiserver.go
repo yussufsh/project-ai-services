@@ -21,7 +21,7 @@ func NewAPIServerCmd() *cobra.Command {
 	)
 	var (
 		port                   = 8080
-		defaultAccessTokenTTL  = time.Minute * 15
+		defaultAccessTokenTTL  = time.Hour * 3
 		defaultRefreshTokenTTL = time.Hour * 24 * 7
 		adminUserName          string
 		adminPasswordHash      string

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/project-ai-services/ai-services/assets"
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
@@ -28,14 +27,15 @@ func (p ImagePullPolicy) Valid() bool {
 
 // Images manages container images for applications, including listing and pulling based on policies.
 type Images struct {
-	Runtime     runtime.Runtime
-	App         string
-	AppTemplate string
+	Runtime          runtime.Runtime
+	App              string
+	AppTemplate      string
+	TemplateProvider templates.Template
 }
 
 // ListImages returns the list of images required for the application template.
 func (img *Images) ListImages() ([]string, error) {
-	tp := templates.NewEmbedTemplateProvider(&assets.ApplicationFS)
+	tp := img.TemplateProvider
 
 	// Fetch list of app templates
 	apps, err := tp.ListApplications(true)
