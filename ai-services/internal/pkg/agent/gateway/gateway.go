@@ -40,7 +40,10 @@ func (g *Gateway) Start(ctx context.Context, addr string) error {
 		return fmt.Errorf("agent gateway: listen on %s: %w", addr, err)
 	}
 
-	g.grpcServer = grpc.NewServer()
+	g.grpcServer = grpc.NewServer(
+		grpc.MaxRecvMsgSize(32*1024*1024),
+		grpc.MaxSendMsgSize(32*1024*1024),
+	)
 	agentpb.RegisterAgentGatewayServer(g.grpcServer, g)
 
 	go func() {

@@ -62,6 +62,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	conn, err := grpc.NewClient(d.cfg.ControlPlaneURL,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(32*1024*1024)),
 	)
 	if err != nil {
 		return fmt.Errorf("agent daemon: dial %s: %w", d.cfg.ControlPlaneURL, err)
