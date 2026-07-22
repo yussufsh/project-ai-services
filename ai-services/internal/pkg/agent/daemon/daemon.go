@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	agentpb "github.com/project-ai-services/ai-services/internal/pkg/agent/proto"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
+	podmanRuntime "github.com/project-ai-services/ai-services/internal/pkg/runtime/podman"
 	runtimetypes "github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 )
 
@@ -353,11 +355,20 @@ func (d *Daemon) dispatchToRuntime(ctx context.Context, cmd *agentpb.Command) ([
 		if err := json.Unmarshal(cmd.GetPayload(), &p); err != nil {
 			return nil, err
 		}
+		// The URL contains the pod name as host (e.g. http://digitize-abc123:4001/path).
+		// Pod names are only resolvable inside the Podman bridge network via the
+		// dnsname plugin — the daemon process runs on the host and cannot use that
+		// resolver. We use the Podman socket (already available as rt) to inspect
+		// the pod's infra container and get its bridge IP, then rewrite the URL.
+		targetURL, err := d.resolvePodURL(ctx, p.URL)
+		if err != nil {
+			return nil, err
+		}
 		var reqBody io.Reader
 		if len(p.Body) > 0 {
 			reqBody = bytes.NewReader(p.Body)
 		}
-		httpReq, err := http.NewRequestWithContext(ctx, p.Method, p.URL, reqBody)
+		httpReq, err := http.NewRequestWithContext(ctx, p.Method, targetURL, reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("http proxy: build request: %w", err)
 		}
@@ -413,4 +424,37 @@ func marshalResult(v any, err error) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(v)
+}
+
+// resolvePodURL rewrites a URL whose host is a Podman pod name (e.g.
+// "http://digitize-abc123:4001/path") to use the pod's bridge IP instead.
+// Pod names are resolved via the Podman socket so no external DNS is needed.
+// If the runtime is not a PodmanClient (e.g. in tests), the original URL is
+// returned unchanged.
+func (d *Daemon) resolvePodURL(ctx context.Context, rawURL string) (string, error) {
+	parsed, err := neturl.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("http proxy: parse URL %q: %w", rawURL, err)
+	}
+
+	pc, ok := d.rt.(*podmanRuntime.PodmanClient)
+	if !ok {
+		// Not a Podman runtime (unit-test stub etc.) — use the URL as-is.
+		return rawURL, nil
+	}
+
+	podName := parsed.Hostname()
+	ip, err := pc.GetPodIP(podName)
+	if err != nil {
+		return "", fmt.Errorf("http proxy: resolve IP for pod %q: %w", podName, err)
+	}
+
+	// Rebuild the URL with the IP in place of the pod name.
+	port := parsed.Port()
+	if port != "" {
+		parsed.Host = ip + ":" + port
+	} else {
+		parsed.Host = ip
+	}
+	return parsed.String(), nil
 }

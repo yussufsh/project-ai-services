@@ -220,6 +220,35 @@ func (pc *PodmanClient) InspectPod(nameOrID string) (*types.Pod, error) {
 	return toPodInspectReport(podInspectReport), nil
 }
 
+// GetPodIP returns the first bridge IP address assigned to the pod's infra
+// container. This is used by the agent daemon to reach pod services without
+// relying on the Podman dnsname plugin, which is not accessible from host
+// processes outside the Podman network namespace.
+func (pc *PodmanClient) GetPodIP(nameOrID string) (string, error) {
+	podReport, err := pods.Inspect(pc.Context, nameOrID, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect pod %s: %w", nameOrID, err)
+	}
+	infraID := podReport.InfraContainerID
+	if infraID == "" {
+		return "", fmt.Errorf("pod %s has no infra container", nameOrID)
+	}
+	ctrReport, err := containers.Inspect(pc.Context, infraID, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect infra container %s: %w", infraID, err)
+	}
+	if ctrReport.NetworkSettings != nil && ctrReport.NetworkSettings.IPAddress != "" {
+		return ctrReport.NetworkSettings.IPAddress, nil
+	}
+	// Fall back to the first additional network's IP.
+	for _, net := range ctrReport.NetworkSettings.Networks {
+		if net.IPAddress != "" {
+			return net.IPAddress, nil
+		}
+	}
+	return "", fmt.Errorf("no IP address found for pod %s infra container", nameOrID)
+}
+
 // streamContainerLogs streams logs from a container using channels.
 func (pc *PodmanClient) streamContainerLogs(ctx context.Context, containerNameOrID string) error {
 	opts := &containers.LogOptions{

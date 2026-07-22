@@ -51,6 +51,10 @@ func (h *AgentHTTPHandler) handle(c *gin.Context) {
 	agentName := c.Param("agent_name")
 	podName := c.Param("pod_name")
 	port := c.Param("port")
+	// *path is the remaining path after /agent-proxy/:agent_name/:pod_name/:port
+	// e.g. "/some/endpoint?query=1". This is what the pod service actually expects —
+	// NOT c.Request.URL.RequestURI() which still contains the /agent-proxy/... prefix.
+	path := c.Param("path")
 
 	entry, ok := h.registry.Get(agentName)
 	if !ok {
@@ -63,7 +67,7 @@ func (h *AgentHTTPHandler) handle(c *gin.Context) {
 	}
 
 	rt := remote.New(agentName, h.registry)
-	if err := rt.ProxyHTTP(c.Request.Context(), c.Writer, c.Request, podName, port); err != nil {
+	if err := rt.ProxyHTTP(c.Request.Context(), c.Writer, c.Request, podName, port, path); err != nil {
 		// Only write an error response if headers haven't been sent yet.
 		if !c.Writer.Written() {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})

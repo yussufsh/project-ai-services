@@ -270,8 +270,17 @@ func (r *RemoteRuntime) GetSystemInfo() (*models.SystemInfo, error) {
 // ProxyHTTP tunnels an HTTP request through the gRPC CommandStream to the agent
 // and writes the response back to w. This is used by AgentHTTPHandler to route
 // Caddy traffic for remote-deployed services through the existing agent channel.
-func (r *RemoteRuntime) ProxyHTTP(ctx context.Context, w http.ResponseWriter, req *http.Request, podName, port string) error {
-	targetURL := fmt.Sprintf("http://%s:%s%s", podName, port, req.URL.RequestURI())
+//
+// path is the real request path (after the /agent-proxy/... prefix is stripped by
+// the Gin handler). It must be passed explicitly rather than derived from req.URL
+// because by the time AgentHTTPHandler sees the request, req.URL.RequestURI()
+// still contains the full /agent-proxy/... prefix.
+func (r *RemoteRuntime) ProxyHTTP(ctx context.Context, w http.ResponseWriter, req *http.Request, podName, port, path string) error {
+	// Preserve the query string if present.
+	if req.URL.RawQuery != "" {
+		path = path + "?" + req.URL.RawQuery
+	}
+	targetURL := fmt.Sprintf("http://%s:%s%s", podName, port, path)
 
 	// Read request body.
 	var bodyBytes []byte
