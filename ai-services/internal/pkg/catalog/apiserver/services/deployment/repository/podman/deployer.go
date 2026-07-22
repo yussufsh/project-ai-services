@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"github.com/google/uuid"
+	agentproxy "github.com/project-ai-services/ai-services/internal/pkg/agent/proxy"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog"
 	apimodels "github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/models"
 	deploymenttypes "github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/services/deployment/types"
@@ -28,6 +29,7 @@ import (
 	podmodels "github.com/project-ai-services/ai-services/internal/pkg/models"
 	"github.com/project-ai-services/ai-services/internal/pkg/proxy"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
+	remoteruntime "github.com/project-ai-services/ai-services/internal/pkg/runtime/remote"
 	runtimetypes "github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/specs"
 	"github.com/project-ai-services/ai-services/internal/pkg/utils"
@@ -1137,6 +1139,14 @@ func (d *PodmanDeployer) registerApplicationRoutes(ctx context.Context, plan *De
 		return err
 	}
 
+	// For remote deployments, derive the agent name so Caddy routes tunnel
+	// through the API Server's /agent-proxy endpoint instead of pointing
+	// directly at the pod name (which is unreachable from the control plane).
+	var remoteAgentName string
+	if rt, ok := d.runtime.(*remoteruntime.RemoteRuntime); ok {
+		remoteAgentName = rt.AgentName()
+	}
+
 	// Register routes for each service and update endpoints in database
 	var registrationErrors []error
 	for _, svc := range plan.Services {
@@ -1144,7 +1154,7 @@ func (d *PodmanDeployer) registerApplicationRoutes(ctx context.Context, plan *De
 			continue
 		}
 
-		if err := d.registerServiceRoutes(ctx, svc, proxyManager, domainSuffix, httpsPort, &registrationErrors); err != nil {
+		if err := d.registerServiceRoutes(ctx, svc, proxyManager, domainSuffix, httpsPort, remoteAgentName, &registrationErrors); err != nil {
 			registrationErrors = append(registrationErrors, err)
 		}
 	}
@@ -1179,26 +1189,41 @@ func (d *PodmanDeployer) getCaddyConfiguration() (string, string, proxy.ProxyMan
 }
 
 // registerServiceRoutes registers routes for a single service and updates its endpoints in the database.
+// When remoteAgentName is non-empty the deployment is on a remote worker agent; Caddy routes are
+// registered with an upstream pointing at the API Server and a path prefix that causes the API Server
+// to tunnel the request through the gRPC CommandStream to the agent.
 func (d *PodmanDeployer) registerServiceRoutes(
 	ctx context.Context,
 	svc *ServicePlan,
 	proxyManager proxy.ProxyManager,
 	domainSuffix string,
 	httpsPort string,
+	remoteAgentName string,
 	registrationErrors *[]error,
 ) error {
 	var serviceEndpoints []map[string]any
 
 	// Register routes for each pod in the service
 	for podName, routesAnnotation := range svc.Routes {
-		registeredRoutes, err := proxy.RegisterRoutesForAppAndReturn(
-			ctx,
-			catalogconstants.CatalogAppName,
-			proxyManager,
-			routesAnnotation,
-			domainSuffix,
-			podName,
-		)
+		var registeredRoutes []proxy.Route
+		var err error
+
+		if remoteAgentName != "" {
+			// Remote deployment: build routes with the API Server as upstream and a
+			// /agent-proxy path prefix so Caddy tunnels traffic through the gRPC stream.
+			registeredRoutes, err = d.buildAndRegisterRemoteRoutes(
+				ctx, proxyManager, routesAnnotation, domainSuffix, podName, remoteAgentName,
+			)
+		} else {
+			registeredRoutes, err = proxy.RegisterRoutesForAppAndReturn(
+				ctx,
+				catalogconstants.CatalogAppName,
+				proxyManager,
+				routesAnnotation,
+				domainSuffix,
+				podName,
+			)
+		}
 		if err != nil {
 			*registrationErrors = append(*registrationErrors, fmt.Errorf("pod %s: %w", podName, err))
 
@@ -1226,6 +1251,61 @@ func (d *PodmanDeployer) registerServiceRoutes(
 	}
 
 	return nil
+}
+
+// buildAndRegisterRemoteRoutes builds Caddy route entries for a remote-deployed pod.
+// Instead of pointing Caddy directly at the pod (which is on a different LPAR), it:
+//  1. Sets the Caddy upstream to the API Server pod (<appName>--catalog:8080), which is
+//     reachable by Caddy on the same Podman network on the control plane.
+//  2. Adds a path prefix /agent-proxy/<agentName>/<podName>/<containerPort> so the
+//     API Server's AgentHTTPHandler can tunnel the request over the gRPC CommandStream.
+//
+// The catalog pod name is deterministic: it is always <CatalogAppName>--catalog, identical
+// to the name produced by catalog.yaml.tmpl — no extra env vars required.
+func (d *PodmanDeployer) buildAndRegisterRemoteRoutes(
+	ctx context.Context,
+	proxyManager proxy.ProxyManager,
+	routesAnnotation, domainSuffix, podName, agentName string,
+) ([]proxy.Route, error) {
+	if err := proxyManager.HealthCheck(); err != nil {
+		return nil, fmt.Errorf("caddy health check failed, routes not registered: %w", err)
+	}
+
+	// The catalog pod name follows the same pattern used by catalog.yaml.tmpl:
+	// "<AppName>--catalog". The API server always listens on port 8080 (catalog.yaml.tmpl).
+	catalogPodName := catalogconstants.CatalogAppName + "--catalog"
+	const apiPort = "8080"
+
+	// Parse the annotation to get per-route (port, subdomain, type) tuples.
+	var routeEntries []proxy.RouteEntryParts
+	for _, entry := range strings.Split(routesAnnotation, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts, err := proxy.ParseRouteEntry(entry)
+		if err != nil {
+			return nil, err
+		}
+		routeEntries = append(routeEntries, *parts)
+	}
+
+	var registered []proxy.Route
+	for _, parts := range routeEntries {
+		route := proxy.Route{
+			ID:         parts.Subdomain,
+			Domain:     fmt.Sprintf("%s.%s", parts.Subdomain, domainSuffix),
+			Upstream:   fmt.Sprintf("%s:%s", catalogPodName, apiPort),
+			PathPrefix: agentproxy.PathPrefixFor(agentName, podName, parts.Port),
+			Terminal:   true,
+			Type:       parts.Type,
+		}
+		if err := proxyManager.RegisterRoute(ctx, route); err != nil {
+			return nil, fmt.Errorf("route %s: %w", route.ID, err)
+		}
+		registered = append(registered, route)
+	}
+	return registered, nil
 }
 
 // updateComponentEndpointsInDB updates component endpoints in the database.

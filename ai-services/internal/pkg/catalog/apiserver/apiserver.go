@@ -36,6 +36,7 @@ import (
 	"fmt"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/agent/gateway"
+	agentproxy "github.com/project-ai-services/ai-services/internal/pkg/agent/proxy"
 	"github.com/project-ai-services/ai-services/internal/pkg/agent/registry"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/repository"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/services/auth"
@@ -109,6 +110,10 @@ func (a *APIserver) Start() error {
 		a.agentRegistry.StartHeartbeatWatcher(ctx)
 	}
 
-	r := CreateRouter(a.authService, a.tokenManager, a.blacklist, a.applicationService, a.agentTokenStore, a.agentRegistry)
+	var agentProxyHandler *agentproxy.AgentHTTPHandler
+	if a.agentRegistry != nil {
+		agentProxyHandler = agentproxy.New(a.agentRegistry)
+	}
+	r := CreateRouter(a.authService, a.tokenManager, a.blacklist, a.applicationService, a.agentTokenStore, a.agentRegistry, agentProxyHandler)
 	return r.Run(fmt.Sprintf(":%d", a.port))
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/project-ai-services/ai-services/docs" // Import generated docs
+	agentproxy "github.com/project-ai-services/ai-services/internal/pkg/agent/proxy"
 	"github.com/project-ai-services/ai-services/internal/pkg/agent/registry"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/handlers"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/middleware"
@@ -16,7 +17,7 @@ import (
 )
 
 // CreateRouter sets up the Gin router with the necessary routes and authentication middleware for the API server.
-func CreateRouter(authSvc auth.Service, tokenMgr *auth.TokenManager, blacklist repository.TokenBlacklist, appService *repository.ApplicationService, agentTokenStore *registry.TokenStore, agentReg *registry.Registry) *gin.Engine {
+func CreateRouter(authSvc auth.Service, tokenMgr *auth.TokenManager, blacklist repository.TokenBlacklist, appService *repository.ApplicationService, agentTokenStore *registry.TokenStore, agentReg *registry.Registry, agentProxyHandler *agentproxy.AgentHTTPHandler) *gin.Engine {
 	if mode := os.Getenv("GIN_MODE"); mode != "" {
 		gin.SetMode(mode)
 	}
@@ -87,6 +88,12 @@ func CreateRouter(authSvc auth.Service, tokenMgr *auth.TokenManager, blacklist r
 		agents.GET("/:agent_name", agentHandler.GetAgent)
 		agents.POST("/tokens", agentHandler.IssueToken)
 		agents.DELETE("/:agent_name", agentHandler.DeleteAgent)
+	}
+
+	// Agent HTTP proxy — tunnels Caddy traffic to remote worker pods.
+	// Mounted at /agent-proxy (no auth: reachable only from Caddy on the same host).
+	if agentProxyHandler != nil {
+		agentProxyHandler.RegisterRoutes(router.Group("/agent-proxy"))
 	}
 
 	return router

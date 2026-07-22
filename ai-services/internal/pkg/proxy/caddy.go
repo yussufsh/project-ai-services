@@ -81,13 +81,24 @@ func (c *caddyManager) RegisterRoute(ctx context.Context, route Route) error {
 		return fmt.Errorf("cannot register route: route ID is empty")
 	}
 
+	// Build the handler chain. When a PathPrefix is set (remote deployments) we
+	// prepend a rewrite handler that injects the prefix before the reverse proxy.
+	var handlers []map[string]any
+	if route.PathPrefix != "" {
+		handlers = append(handlers, map[string]any{
+			"handler": "rewrite",
+			"uri":     route.PathPrefix + "{http.request.uri}",
+		})
+	}
+	handlers = append(handlers, map[string]any{
+		"handler":   "reverse_proxy",
+		"upstreams": []map[string]any{{"dial": route.Upstream}},
+	})
+
 	routeConfig := map[string]any{
-		"@id":   route.ID,
-		"match": []map[string]any{{"host": []string{route.Domain}}},
-		"handle": []map[string]any{{
-			"handler":   "reverse_proxy",
-			"upstreams": []map[string]any{{"dial": route.Upstream}},
-		}},
+		"@id":      route.ID,
+		"match":    []map[string]any{{"host": []string{route.Domain}}},
+		"handle":   handlers,
 		"terminal": route.Terminal,
 	}
 

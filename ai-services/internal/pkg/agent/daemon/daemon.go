@@ -4,10 +4,12 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -340,6 +342,54 @@ func (d *Daemon) dispatchToRuntime(ctx context.Context, cmd *agentpb.Command) ([
 		// Report the actual runtime type so the control plane can route
 		// to the correct deployer (PodmanDeployer, OpenShiftDeployer, etc.).
 		return marshalResult(string(rt.Type()), nil)
+
+	case agentpb.CommandType_COMMAND_TYPE_HTTP_PROXY:
+		var p struct {
+			Method  string            `json:"method"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers,omitempty"`
+			Body    []byte            `json:"body,omitempty"`
+		}
+		if err := json.Unmarshal(cmd.GetPayload(), &p); err != nil {
+			return nil, err
+		}
+		var reqBody io.Reader
+		if len(p.Body) > 0 {
+			reqBody = bytes.NewReader(p.Body)
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, p.Method, p.URL, reqBody)
+		if err != nil {
+			return nil, fmt.Errorf("http proxy: build request: %w", err)
+		}
+		for k, v := range p.Headers {
+			httpReq.Header.Set(k, v)
+		}
+		httpResp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("http proxy: do request: %w", err)
+		}
+		defer httpResp.Body.Close()
+		respBody, err := io.ReadAll(httpResp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("http proxy: read response body: %w", err)
+		}
+		// Flatten response headers.
+		respHeaders := make(map[string]string)
+		for k, vals := range httpResp.Header {
+			if len(vals) > 0 {
+				respHeaders[k] = vals[0]
+			}
+		}
+		type proxyResp struct {
+			StatusCode int               `json:"status_code"`
+			Headers    map[string]string `json:"headers,omitempty"`
+			Body       []byte            `json:"body"`
+		}
+		return marshalResult(proxyResp{
+			StatusCode: httpResp.StatusCode,
+			Headers:    respHeaders,
+			Body:       respBody,
+		}, nil)
 
 	case agentpb.CommandType_COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER:
 		var p struct {

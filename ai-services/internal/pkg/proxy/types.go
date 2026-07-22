@@ -28,6 +28,12 @@ type Route struct {
 	// Upstream is the backend service address (e.g., "pod-name:8080")
 	Upstream string
 
+	// PathPrefix, when non-empty, is prepended to every proxied request via a
+	// Caddy rewrite handler inserted before the reverse_proxy handler.
+	// Used for remote deployments where Caddy must forward to the API Server's
+	// /agent-proxy/<agentName>/<podName>/<port> path.
+	PathPrefix string
+
 	// Terminal indicates if route matching should stop after this route
 	Terminal bool
 

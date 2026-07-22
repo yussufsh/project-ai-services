@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -126,6 +127,17 @@ type containerLogsPayload struct{ ContainerNameOrID string }
 type listRoutesPayload struct{}
 type deletePVCsPayload struct{ AppLabel string }
 type getSystemInfoPayload struct{}
+type httpProxyPayload struct {
+	Method  string            `json:"method"`
+	URL     string            `json:"url"` // http://pod-name:port/path
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    []byte            `json:"body,omitempty"`
+}
+type httpProxyResponse struct {
+	StatusCode int               `json:"status_code"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	Body       []byte            `json:"body"`
+}
 type runEphemeralContainerPayload struct {
 	Image  string           `json:"image"`
 	Cmd    []string         `json:"cmd"`
@@ -255,11 +267,60 @@ func (r *RemoteRuntime) GetSystemInfo() (*models.SystemInfo, error) {
 	return &result, err
 }
 
+// ProxyHTTP tunnels an HTTP request through the gRPC CommandStream to the agent
+// and writes the response back to w. This is used by AgentHTTPHandler to route
+// Caddy traffic for remote-deployed services through the existing agent channel.
+func (r *RemoteRuntime) ProxyHTTP(ctx context.Context, w http.ResponseWriter, req *http.Request, podName, port string) error {
+	targetURL := fmt.Sprintf("http://%s:%s%s", podName, port, req.URL.RequestURI())
+
+	// Read request body.
+	var bodyBytes []byte
+	if req.Body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return fmt.Errorf("remote proxy: read request body: %w", err)
+		}
+	}
+
+	// Flatten headers — only forward application-level headers.
+	headers := make(map[string]string)
+	for k, vals := range req.Header {
+		if len(vals) > 0 {
+			headers[k] = vals[0]
+		}
+	}
+
+	var resp httpProxyResponse
+	if err := r.dispatch(ctx, agentpb.CommandType_COMMAND_TYPE_HTTP_PROXY, httpProxyPayload{
+		Method:  req.Method,
+		URL:     targetURL,
+		Headers: headers,
+		Body:    bodyBytes,
+	}, &resp); err != nil {
+		return err
+	}
+
+	// Copy response headers.
+	for k, v := range resp.Headers {
+		w.Header().Set(k, v)
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = w.Write(resp.Body)
+	return nil
+}
+
 func (r *RemoteRuntime) RunEphemeralContainer(image string, cmd []string, mounts []types.BindMount) (int32, error) {
 	var exitCode int32
 	err := r.dispatch(context.Background(), agentpb.CommandType_COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER,
 		runEphemeralContainerPayload{Image: image, Cmd: cmd, Mounts: mounts}, &exitCode)
 	return exitCode, err
+}
+
+// AgentName returns the name of the remote agent this runtime targets.
+// Used by the deployer to build Caddy proxy routes for remote deployments.
+func (r *RemoteRuntime) AgentName() string {
+	return r.agentName
 }
 
 // Type queries the remote agent for its local runtime type and maps it to the

@@ -52,6 +52,7 @@ const (
 	CommandType_COMMAND_TYPE_GET_SYSTEM_INFO         CommandType = 22
 	CommandType_COMMAND_TYPE_RUNTIME_TYPE            CommandType = 23
 	CommandType_COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER CommandType = 24
+	CommandType_COMMAND_TYPE_HTTP_PROXY               CommandType = 25
 )
 
 // Enum value maps for CommandType.
@@ -82,6 +83,7 @@ var (
 		22: "COMMAND_TYPE_GET_SYSTEM_INFO",
 		23: "COMMAND_TYPE_RUNTIME_TYPE",
 		24: "COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER",
+		25: "COMMAND_TYPE_HTTP_PROXY",
 	}
 	CommandType_value = map[string]int32{
 		"COMMAND_TYPE_UNSPECIFIED":             0,
@@ -109,6 +111,7 @@ var (
 		"COMMAND_TYPE_GET_SYSTEM_INFO":         22,
 		"COMMAND_TYPE_RUNTIME_TYPE":            23,
 		"COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER": 24,
+		"COMMAND_TYPE_HTTP_PROXY":               25,
 	}
 )
 
