@@ -100,6 +100,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 // runStream opens the bidirectional CommandStream, sends a heartbeat as the
 // first message, then continuously processes incoming Commands.
+//
+// Commands are dispatched concurrently: each received Command is handled in its
+// own goroutine so that slow operations (HTTP proxy, image pulls, etc.) do not
+// block other in-flight commands. A dedicated send goroutine serialises all
+// CommandResult writes back onto the stream, since gRPC Send is not goroutine-safe.
 func (d *Daemon) runStream(ctx context.Context, client agentpb.AgentGatewayClient) error {
 	stream, err := client.CommandStream(ctx)
 	if err != nil {
@@ -115,30 +120,62 @@ func (d *Daemon) runStream(ctx context.Context, client agentpb.AgentGatewayClien
 		return fmt.Errorf("send initial heartbeat: %w", err)
 	}
 
-	// Start the heartbeat goroutine.
+	// sendCh serialises all outbound CommandResults onto the single stream.
+	// Buffer matches CommandCh so fast producers never block on the send path.
+	sendCh := make(chan *agentpb.CommandResult, 64)
+
+	// send goroutine: drains sendCh and writes to stream.
+	sendErrCh := make(chan error, 1)
+	go func() {
+		for res := range sendCh {
+			if err := stream.Send(res); err != nil {
+				sendErrCh <- err
+				return
+			}
+		}
+	}()
+
+	// Start the heartbeat goroutine — it also writes through sendCh.
 	hbCtx, hbCancel := context.WithCancel(ctx)
 	defer hbCancel()
-	go d.heartbeatLoop(hbCtx, stream)
+	go d.heartbeatLoop(hbCtx, sendCh)
 
-	// Process incoming Commands.
-	for {
-		cmd, err := stream.Recv()
-		if err == io.EOF {
-			return fmt.Errorf("stream closed by server")
+	// recv loop: dispatch each Command in its own goroutine.
+	recvErrCh := make(chan error, 1)
+	go func() {
+		for {
+			cmd, err := stream.Recv()
+			if err == io.EOF {
+				recvErrCh <- fmt.Errorf("stream closed by server")
+				return
+			}
+			if err != nil {
+				recvErrCh <- fmt.Errorf("recv: %w", err)
+				return
+			}
+			go func(cmd *agentpb.Command) {
+				result := d.executeCommand(ctx, cmd)
+				select {
+				case sendCh <- result:
+				case <-ctx.Done():
+				}
+			}(cmd)
 		}
-		if err != nil {
-			return fmt.Errorf("recv: %w", err)
-		}
+	}()
 
-		result := d.executeCommand(ctx, cmd)
-		if err := stream.Send(result); err != nil {
-			return fmt.Errorf("send result: %w", err)
-		}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-recvErrCh:
+		return err
+	case err := <-sendErrCh:
+		return fmt.Errorf("send: %w", err)
 	}
 }
 
 // heartbeatLoop sends a heartbeat every heartbeatInterval until ctx is done.
-func (d *Daemon) heartbeatLoop(ctx context.Context, stream agentpb.AgentGateway_CommandStreamClient) {
+// Results are written to sendCh so they are serialised by the send goroutine.
+func (d *Daemon) heartbeatLoop(ctx context.Context, sendCh chan<- *agentpb.CommandResult) {
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 	for {
@@ -146,11 +183,15 @@ func (d *Daemon) heartbeatLoop(ctx context.Context, stream agentpb.AgentGateway_
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = stream.Send(&agentpb.CommandResult{
+			select {
+			case sendCh <- &agentpb.CommandResult{
 				AgentName:   d.cfg.AgentName,
 				IsHeartbeat: true,
 				Success:     true,
-			})
+			}:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 }
