@@ -33,6 +33,11 @@ type Route struct {
 
 	// Type indicates the endpoint type
 	Type string
+
+	// TLSTransport instructs the reverse proxy to dial the upstream over TLS
+	// with certificate verification disabled. Used when the upstream is a
+	// Worker Caddy instance that uses a self-signed internal CA cert.
+	TLSTransport bool
 }
 
 // Made with Bob

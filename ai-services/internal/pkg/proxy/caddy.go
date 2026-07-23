@@ -81,13 +81,25 @@ func (c *caddyManager) RegisterRoute(ctx context.Context, route Route) error {
 		return fmt.Errorf("cannot register route: route ID is empty")
 	}
 
+	reverseProxy := map[string]any{
+		"handler":   "reverse_proxy",
+		"upstreams": []map[string]any{{"dial": route.Upstream}},
+	}
+	if route.TLSTransport {
+		// Worker Caddy uses a self-signed internal CA cert; skip verification
+		// so the control-plane Caddy can dial it over TLS without a shared CA.
+		reverseProxy["transport"] = map[string]any{
+			"protocol": "http",
+			"tls": map[string]any{
+				"insecure_skip_verify": true,
+			},
+		}
+	}
+
 	routeConfig := map[string]any{
-		"@id":   route.ID,
-		"match": []map[string]any{{"host": []string{route.Domain}}},
-		"handle": []map[string]any{{
-			"handler":   "reverse_proxy",
-			"upstreams": []map[string]any{{"dial": route.Upstream}},
-		}},
+		"@id":      route.ID,
+		"match":    []map[string]any{{"host": []string{route.Domain}}},
+		"handle":   []map[string]any{reverseProxy},
 		"terminal": route.Terminal,
 	}
 

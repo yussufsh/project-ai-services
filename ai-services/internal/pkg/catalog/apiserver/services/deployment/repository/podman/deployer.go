@@ -1300,12 +1300,16 @@ func (d *PodmanDeployer) registerRemoteServiceRoutes(
 			logger.InfofCtx(ctx, "Registered route %s on Worker Caddy (upstream: %s)\n", route.ID, route.Upstream)
 
 			// ── Step 2: register on control-plane Caddy (workerIP:8443 upstream) ─
+			// TLSTransport=true because the Worker Caddy listens on TLS (:443 with
+			// tls internal) and the control-plane does not share its CA, so we dial
+			// with TLS and skip verification (traffic is internal LPAR-to-LPAR).
 			ctrlRoute := proxy.Route{
-				ID:       route.ID,
-				Domain:   route.Domain,
-				Upstream: workerCaddyUpstream,
-				Terminal: true,
-				Type:     route.Type,
+				ID:           route.ID,
+				Domain:       route.Domain,
+				Upstream:     workerCaddyUpstream,
+				Terminal:     true,
+				Type:         route.Type,
+				TLSTransport: true,
 			}
 			if err := ctrlProxyManager.RegisterRoute(ctx, ctrlRoute); err != nil {
 				*registrationErrors = append(*registrationErrors, fmt.Errorf("pod %s route %s: ctrl-plane caddy register: %w", podName, route.ID, err))
