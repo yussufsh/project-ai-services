@@ -1,7 +1,9 @@
 {
-	# Admin API bound to localhost only — reachable by the daemon process on the
-	# host OS via http://localhost:2019, not from outside the Worker LPAR.
-	admin 127.0.0.1:2019
+	# Admin API bound to all interfaces inside the container so that the host-side
+	# port binding (127.0.0.1:2019:2019) can forward requests to it.
+	# Access is restricted at the host level: the port is only published on the
+	# host loopback (127.0.0.1), so it remains unreachable from outside the LPAR.
+	admin 0.0.0.0:2019
 
 	servers :443 {
 		name worker
