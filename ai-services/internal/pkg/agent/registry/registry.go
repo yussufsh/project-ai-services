@@ -43,6 +43,11 @@ type AgentEntry struct {
 	Status        AgentStatus
 	LastHeartbeat time.Time
 	RegisteredAt  time.Time
+	// WorkerIP is the source IP of the agent's gRPC connection, extracted
+	// automatically by the gateway from the TCP peer address.
+	// The control-plane deployer uses it to point its Caddy at the Worker's
+	// Caddy instance (WorkerIP:8443) without requiring any operator input.
+	WorkerIP string
 
 	// CommandCh is written by RemoteRuntime to send commands to this agent.
 	// The gateway goroutine reads from it and writes to the gRPC stream.
@@ -176,6 +181,16 @@ func (r *Registry) Upsert(ctx context.Context, req *agentpb.RegisterRequest) (*A
 	return entry, nil
 }
 
+// SetWorkerIP records the TCP source IP of the agent's gRPC connection.
+// Called by the gateway immediately after CommandStream is established.
+func (r *Registry) SetWorkerIP(agentName, ip string) {
+	r.mu.Lock()
+	if entry, ok := r.agents[agentName]; ok {
+		entry.WorkerIP = ip
+	}
+	r.mu.Unlock()
+}
+
 // MarkReady transitions an agent to READY status.
 func (r *Registry) MarkReady(ctx context.Context, agentName string) {
 	r.updateStatus(ctx, agentName, AgentStatusReady)
@@ -277,6 +292,7 @@ type AgentStatusInfo struct {
 	LastHeartbeat time.Time
 	RegisteredAt  time.Time
 	ActiveSlots   int
+	WorkerIP      string
 }
 
 // Snapshot returns a status snapshot of all known agents.
@@ -293,6 +309,7 @@ func (r *Registry) Snapshot() []AgentStatusInfo {
 			LastHeartbeat: e.LastHeartbeat,
 			RegisteredAt:  e.RegisteredAt,
 			ActiveSlots:   e.activeSlots(),
+			WorkerIP:      e.WorkerIP,
 		})
 	}
 	return out

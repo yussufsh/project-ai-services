@@ -262,6 +262,61 @@ func (r *RemoteRuntime) RunEphemeralContainer(image string, cmd []string, mounts
 	return exitCode, err
 }
 
+// AgentName returns the name of the remote agent this runtime targets.
+func (r *RemoteRuntime) AgentName() string {
+	return r.agentName
+}
+
+// RegistryEntry returns the live registry entry for this agent.
+// The deployer uses it to read WorkerIP (the auto-detected gRPC peer IP).
+func (r *RemoteRuntime) RegistryEntry() (*registry.AgentEntry, bool) {
+	return r.registry.Get(r.agentName)
+}
+
+// RegisterCaddyRoute sends a Caddy route config (raw JSON) to the Worker agent,
+// which posts it verbatim to its local Caddy Admin API.
+// routeJSON must be a complete Caddy route object containing an "@id" field.
+func (r *RemoteRuntime) RegisterCaddyRoute(ctx context.Context, routeJSON []byte) error {
+	cmd := &agentpb.Command{
+		CommandId: uuid.NewString(),
+		Type:      agentpb.CommandType_COMMAND_TYPE_REGISTER_CADDY_ROUTE,
+		Payload:   routeJSON,
+	}
+	resultCh, err := r.registry.WaitForResult(r.agentName, cmd.CommandId)
+	if err != nil {
+		return err
+	}
+	entry, ok := r.registry.Get(r.agentName)
+	if !ok {
+		return fmt.Errorf("remote runtime: agent %s not found", r.agentName)
+	}
+	select {
+	case entry.CommandCh <- cmd:
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("remote runtime: timed out enqueuing REGISTER_CADDY_ROUTE to agent %s", r.agentName)
+	}
+	select {
+	case res := <-resultCh:
+		if !res.GetSuccess() {
+			return fmt.Errorf("remote runtime: agent %s caddy register error: %s", r.agentName, res.GetError())
+		}
+		return nil
+	case <-time.After(30 * time.Second):
+		return fmt.Errorf("remote runtime: REGISTER_CADDY_ROUTE timed out for agent %s", r.agentName)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// UnregisterCaddyRoute removes a route by ID from the Worker Caddy Admin API.
+func (r *RemoteRuntime) UnregisterCaddyRoute(ctx context.Context, routeID string) error {
+	type payload struct {
+		RouteID string `json:"route_id"`
+	}
+	return r.dispatch(ctx, agentpb.CommandType_COMMAND_TYPE_UNREGISTER_CADDY_ROUTE,
+		payload{RouteID: routeID}, nil)
+}
+
 // Type queries the remote agent for its local runtime type and maps it to the
 // corresponding remote constant (RuntimeTypeRemotePodman / RuntimeTypeRemoteOpenShift).
 // Falls back to RuntimeTypeRemotePodman on any error since all current agents run Podman.

@@ -3,6 +3,7 @@ package podman
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -28,6 +29,7 @@ import (
 	podmodels "github.com/project-ai-services/ai-services/internal/pkg/models"
 	"github.com/project-ai-services/ai-services/internal/pkg/proxy"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
+	remoteruntime "github.com/project-ai-services/ai-services/internal/pkg/runtime/remote"
 	runtimetypes "github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/specs"
 	"github.com/project-ai-services/ai-services/internal/pkg/utils"
@@ -1128,7 +1130,16 @@ func (d *PodmanDeployer) getEnvParamsForComponent(ctx context.Context, podSpec *
 	return env, nil
 }
 
-// registerApplicationRoutes registers routes for all services with Caddy proxy and updates endpoints in database.
+// registerApplicationRoutes registers Caddy routes for all services in the plan.
+//
+// Local deployments: routes go directly on the control-plane Caddy pointing at
+// the pod name as upstream.
+//
+// Remote deployments: two registrations happen per route:
+//  1. Worker Caddy (via gRPC → daemon → Caddy Admin API): upstream = pod:port,
+//     which resolves natively inside the Worker's Podman bridge network.
+//  2. Control-plane Caddy: upstream = workerIP:8443, forwarding to the Worker
+//     Caddy which then forwards to the pod.
 func (d *PodmanDeployer) registerApplicationRoutes(ctx context.Context, plan *DeploymentPlan) error {
 	logger.InfofCtx(ctx, "Registering routes for application '%s'\n", plan.ApplicationName)
 
@@ -1137,15 +1148,23 @@ func (d *PodmanDeployer) registerApplicationRoutes(ctx context.Context, plan *De
 		return err
 	}
 
-	// Register routes for each service and update endpoints in database
+	// Detect remote deployment: type-assert the runtime to RemoteRuntime.
+	rt, isRemote := d.runtime.(*remoteruntime.RemoteRuntime)
+
 	var registrationErrors []error
 	for _, svc := range plan.Services {
 		if len(svc.Routes) == 0 {
 			continue
 		}
 
-		if err := d.registerServiceRoutes(ctx, svc, proxyManager, domainSuffix, httpsPort, &registrationErrors); err != nil {
-			registrationErrors = append(registrationErrors, err)
+		var svcErr error
+		if isRemote {
+			svcErr = d.registerRemoteServiceRoutes(ctx, svc, proxyManager, domainSuffix, httpsPort, rt, &registrationErrors)
+		} else {
+			svcErr = d.registerServiceRoutes(ctx, svc, proxyManager, domainSuffix, httpsPort, &registrationErrors)
+		}
+		if svcErr != nil {
+			registrationErrors = append(registrationErrors, svcErr)
 		}
 	}
 
@@ -1178,7 +1197,8 @@ func (d *PodmanDeployer) getCaddyConfiguration() (string, string, proxy.ProxyMan
 	return domainSuffix, httpsPort, proxyManager, nil
 }
 
-// registerServiceRoutes registers routes for a single service and updates its endpoints in the database.
+// registerServiceRoutes registers routes on the local (control-plane) Caddy for
+// a single service and updates its endpoints in the database.
 func (d *PodmanDeployer) registerServiceRoutes(
 	ctx context.Context,
 	svc *ServicePlan,
@@ -1189,7 +1209,6 @@ func (d *PodmanDeployer) registerServiceRoutes(
 ) error {
 	var serviceEndpoints []map[string]any
 
-	// Register routes for each pod in the service
 	for podName, routesAnnotation := range svc.Routes {
 		registeredRoutes, err := proxy.RegisterRoutesForAppAndReturn(
 			ctx,
@@ -1207,17 +1226,13 @@ func (d *PodmanDeployer) registerServiceRoutes(
 
 		// Convert registered routes to endpoint format using route type
 		for _, route := range registeredRoutes {
-			url := catalogutils.BuildExternalURL(route.Domain, httpsPort)
-
-			endpoint := map[string]any{
+			serviceEndpoints = append(serviceEndpoints, map[string]any{
 				"type": route.Type,
-				"url":  url,
-			}
-			serviceEndpoints = append(serviceEndpoints, endpoint)
+				"url":  catalogutils.BuildExternalURL(route.Domain, httpsPort),
+			})
 		}
 	}
 
-	// Update service endpoints in database
 	if len(serviceEndpoints) > 0 {
 		if err := d.serviceRepo.UpdateEndpoints(ctx, svc.DatabaseID, serviceEndpoints); err != nil {
 			return fmt.Errorf("service %s DB update: %w", svc.DatabaseID, err)
@@ -1226,6 +1241,115 @@ func (d *PodmanDeployer) registerServiceRoutes(
 	}
 
 	return nil
+}
+
+// registerRemoteServiceRoutes handles route registration for a service deployed
+// on a remote Worker LPAR.
+//
+// For each pod/port pair in the service routes annotation it:
+//  1. Sends a REGISTER_CADDY_ROUTE command to the Worker agent, which posts the
+//     route to the Worker's local Caddy Admin API (upstream = pod:port, fully
+//     resolvable inside the Worker's Podman bridge network).
+//  2. Registers the same subdomain on the control-plane Caddy with upstream
+//     workerIP:8443, so browser → ctrl-plane Caddy → Worker Caddy → pod.
+func (d *PodmanDeployer) registerRemoteServiceRoutes(
+	ctx context.Context,
+	svc *ServicePlan,
+	ctrlProxyManager proxy.ProxyManager,
+	domainSuffix string,
+	httpsPort string,
+	rt *remoteruntime.RemoteRuntime,
+	registrationErrors *[]error,
+) error {
+	// Retrieve the Worker's IP from the registry so we can build the
+	// control-plane Caddy upstream.
+	entry, ok := rt.RegistryEntry()
+	if !ok {
+		return fmt.Errorf("remote service routes: agent %s not found in registry", rt.AgentName())
+	}
+	workerIP := entry.WorkerIP
+	if workerIP == "" {
+		return fmt.Errorf("remote service routes: agent %s has no WorkerIP yet (CommandStream not yet open?)", rt.AgentName())
+	}
+
+	// workerCaddyUpstream is the address control-plane Caddy dials to reach the
+	// Worker Caddy instance.  Port 8443 is the hostPort in agent-caddy.yaml.tmpl.
+	const workerCaddyHostPort = "8443"
+	workerCaddyUpstream := workerIP + ":" + workerCaddyHostPort
+
+	var serviceEndpoints []map[string]any
+
+	for podName, routesAnnotation := range svc.Routes {
+		routeEntries, err := proxy.BuildRoutesFromAnnotation(routesAnnotation, domainSuffix, podName)
+		if err != nil {
+			*registrationErrors = append(*registrationErrors, fmt.Errorf("pod %s: parse routes: %w", podName, err))
+			continue
+		}
+
+		for _, route := range routeEntries {
+			// ── Step 1: register on Worker Caddy (pod:port upstream) ──────────
+			workerRouteJSON, err := workerCaddyRouteJSON(route.ID, route.Domain, podName+":"+extractPort(route.Upstream))
+			if err != nil {
+				*registrationErrors = append(*registrationErrors, fmt.Errorf("pod %s route %s: build worker caddy JSON: %w", podName, route.ID, err))
+				continue
+			}
+			if err := rt.RegisterCaddyRoute(ctx, workerRouteJSON); err != nil {
+				*registrationErrors = append(*registrationErrors, fmt.Errorf("pod %s route %s: worker caddy register: %w", podName, route.ID, err))
+				continue
+			}
+			logger.InfofCtx(ctx, "Registered route %s on Worker Caddy (upstream: %s)\n", route.ID, route.Upstream)
+
+			// ── Step 2: register on control-plane Caddy (workerIP:8443 upstream) ─
+			ctrlRoute := proxy.Route{
+				ID:       route.ID,
+				Domain:   route.Domain,
+				Upstream: workerCaddyUpstream,
+				Terminal: true,
+				Type:     route.Type,
+			}
+			if err := ctrlProxyManager.RegisterRoute(ctx, ctrlRoute); err != nil {
+				*registrationErrors = append(*registrationErrors, fmt.Errorf("pod %s route %s: ctrl-plane caddy register: %w", podName, route.ID, err))
+				continue
+			}
+			logger.InfofCtx(ctx, "Registered route %s on control-plane Caddy (upstream: %s)\n", route.ID, workerCaddyUpstream)
+
+			serviceEndpoints = append(serviceEndpoints, map[string]any{
+				"type": route.Type,
+				"url":  catalogutils.BuildExternalURL(route.Domain, httpsPort),
+			})
+		}
+	}
+
+	if len(serviceEndpoints) > 0 {
+		if err := d.serviceRepo.UpdateEndpoints(ctx, svc.DatabaseID, serviceEndpoints); err != nil {
+			return fmt.Errorf("service %s DB update: %w", svc.DatabaseID, err)
+		}
+		logger.InfofCtx(ctx, "Updated service %s with %d endpoint(s) in database\n", svc.DatabaseID, len(serviceEndpoints))
+	}
+
+	return nil
+}
+
+// workerCaddyRouteJSON builds the JSON body for a Caddy route to be posted to
+// the Worker Caddy Admin API.  The upstream is the pod name + port, which is
+// resolvable inside the Worker's Podman bridge network.
+func workerCaddyRouteJSON(routeID, domain, upstream string) ([]byte, error) {
+	route := map[string]any{
+		"@id":      routeID,
+		"match":    []map[string]any{{"host": []string{domain}}},
+		"handle":   []map[string]any{{"handler": "reverse_proxy", "upstreams": []map[string]any{{"dial": upstream}}}},
+		"terminal": true,
+	}
+	return json.Marshal(route)
+}
+
+// extractPort returns the port portion of a "host:port" string.
+// Returns the whole string unchanged if it contains no colon.
+func extractPort(upstream string) string {
+	if idx := strings.LastIndex(upstream, ":"); idx >= 0 {
+		return upstream[idx+1:]
+	}
+	return upstream
 }
 
 // updateComponentEndpointsInDB updates component endpoints in the database.

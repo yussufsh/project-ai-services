@@ -17,16 +17,20 @@ Typical workflow on a Worker LPAR:
   1. ai-services bootstrap configure --runtime podman
      Install Podman, configure Spyre cards, ulimits, SELinux, SMT.
 
-  2. Obtain a bootstrap token (on the control plane):
+  2. ai-services agent configure --base-dir /var/lib/ai-services
+     Deploy the Worker Caddy proxy pod (run once; idempotent).
+
+  3. Obtain a bootstrap token (on the control plane):
        ai-services catalog agent issue-token
 
-  3. ai-services agent start --server <host:port> --name <name> --token <token>
+  4. ai-services agent start --server <host:port> --name <name> --token <token>
      Register with the control plane and start the persistent CommandStream.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
 	}
 
+	cmd.AddCommand(newConfigureCmd())
 	cmd.AddCommand(newStartCmd())
 	cmd.AddCommand(newStatusCmd())
 

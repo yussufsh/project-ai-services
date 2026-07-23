@@ -20,11 +20,11 @@ import (
 
 func newStartCmd() *cobra.Command {
 	var (
-		server       string
-		agentName    string
-		token        string
-		runtimeName  string
-		tlsDir       = agentbootstrap.DefaultAgentTLSDir
+		server      string
+		agentName   string
+		token       string
+		runtimeName string
+		tlsDir      = agentbootstrap.DefaultAgentTLSDir
 	)
 
 	cmd := &cobra.Command{

@@ -78,6 +78,7 @@ func (h *AgentHandler) GetAgent(c *gin.Context) {
 				Status:      string(s.Status),
 				Labels:      s.Labels,
 				ActiveSlots: s.ActiveSlots,
+				WorkerIP:    s.WorkerIP,
 			}
 			if !s.LastHeartbeat.IsZero() {
 				ai.LastHeartbeat = s.LastHeartbeat.UTC().Format(time.RFC3339)
@@ -151,6 +152,7 @@ func (h *AgentHandler) ListAgents(c *gin.Context) {
 			AgentName: s.AgentName,
 			Status:    string(s.Status),
 			Labels:    s.Labels,
+			WorkerIP:  s.WorkerIP,
 		}
 		if !s.LastHeartbeat.IsZero() {
 			ai.LastHeartbeat = s.LastHeartbeat.UTC().Format(time.RFC3339)
@@ -178,6 +180,7 @@ type AgentInfo struct {
 	Labels        map[string]string `json:"labels"`
 	LastHeartbeat string            `json:"last_heartbeat,omitempty"`
 	ActiveSlots   int               `json:"active_slots"`
+	WorkerIP      string            `json:"worker_ip,omitempty"`
 }
 
 // ListAgentsResponse is returned by GET /api/v1/agents.

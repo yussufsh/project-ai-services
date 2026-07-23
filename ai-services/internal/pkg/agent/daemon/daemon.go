@@ -4,10 +4,12 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -19,6 +21,11 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
 	runtimetypes "github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 )
+
+// workerCaddyAdminURL is the Caddy Admin API address on the Worker LPAR.
+// The agent-caddy pod exposes port 2019 bound to localhost so only the
+// daemon process can reach it from the host OS.
+const workerCaddyAdminURL = "http://localhost:2019"
 
 const (
 	heartbeatInterval  = 30 * time.Second
@@ -341,6 +348,21 @@ func (d *Daemon) dispatchToRuntime(ctx context.Context, cmd *agentpb.Command) ([
 		// to the correct deployer (PodmanDeployer, OpenShiftDeployer, etc.).
 		return marshalResult(string(rt.Type()), nil)
 
+	case agentpb.CommandType_COMMAND_TYPE_REGISTER_CADDY_ROUTE:
+		// Payload is a JSON object that is posted verbatim to the Worker Caddy
+		// Admin API POST /config/apps/http/servers/worker/routes
+		return nil, d.caddyPostRoute(ctx, cmd.GetPayload())
+
+	case agentpb.CommandType_COMMAND_TYPE_UNREGISTER_CADDY_ROUTE:
+		// Payload: {"route_id": "<id>"}
+		var p struct {
+			RouteID string `json:"route_id"`
+		}
+		if err := json.Unmarshal(cmd.GetPayload(), &p); err != nil {
+			return nil, fmt.Errorf("caddy unregister: unmarshal payload: %w", err)
+		}
+		return nil, d.caddyDeleteRoute(ctx, p.RouteID)
+
 	case agentpb.CommandType_COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER:
 		var p struct {
 			Image  string                 `json:"image"`
@@ -363,4 +385,69 @@ func marshalResult(v any, err error) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(v)
+}
+
+// caddyPostRoute posts a raw JSON route config to the Worker Caddy Admin API,
+// first checking whether the route already exists by ID to remain idempotent.
+func (d *Daemon) caddyPostRoute(ctx context.Context, rawRouteJSON []byte) error {
+	// Extract "@id" from the payload so we can check existence first.
+	var meta struct {
+		ID string `json:"@id"`
+	}
+	if err := json.Unmarshal(rawRouteJSON, &meta); err != nil {
+		return fmt.Errorf("caddy register: parse route id: %w", err)
+	}
+
+	// Check if the route already exists.
+	checkURL := workerCaddyAdminURL + "/id/" + meta.ID
+	checkReq, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
+	if err != nil {
+		return fmt.Errorf("caddy register: build check request: %w", err)
+	}
+	checkResp, err := http.DefaultClient.Do(checkReq)
+	if err != nil {
+		return fmt.Errorf("caddy register: check route existence: %w", err)
+	}
+	checkResp.Body.Close()
+	if checkResp.StatusCode == http.StatusOK {
+		logger.DebugfCtx(ctx, "caddy register: route %s already exists, skipping", meta.ID)
+		return nil
+	}
+
+	// POST to append the new route.
+	postURL := workerCaddyAdminURL + "/config/apps/http/servers/worker/routes"
+	postReq, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL,
+		bytes.NewReader(rawRouteJSON))
+	if err != nil {
+		return fmt.Errorf("caddy register: build post request: %w", err)
+	}
+	postReq.Header.Set("Content-Type", "application/json")
+	postResp, err := http.DefaultClient.Do(postReq)
+	if err != nil {
+		return fmt.Errorf("caddy register: post route: %w", err)
+	}
+	defer postResp.Body.Close()
+	if postResp.StatusCode != http.StatusOK && postResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(postResp.Body)
+		return fmt.Errorf("caddy register: status %d: %s", postResp.StatusCode, body)
+	}
+	return nil
+}
+
+// caddyDeleteRoute removes a route from the Worker Caddy Admin API by ID.
+func (d *Daemon) caddyDeleteRoute(ctx context.Context, routeID string) error {
+	delURL := workerCaddyAdminURL + "/id/" + routeID
+	delReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, delURL, nil)
+	if err != nil {
+		return fmt.Errorf("caddy unregister: build delete request: %w", err)
+	}
+	delResp, err := http.DefaultClient.Do(delReq)
+	if err != nil {
+		return fmt.Errorf("caddy unregister: delete route: %w", err)
+	}
+	delResp.Body.Close()
+	if delResp.StatusCode != http.StatusOK && delResp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("caddy unregister: unexpected status %d for route %s", delResp.StatusCode, routeID)
+	}
+	return nil
 }

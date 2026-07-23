@@ -12,9 +12,9 @@ import (
 
 func newListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List all registered worker agents",
-		Long:  `Show the status of all worker agents registered with the control-plane AgentGateway.`,
+		Use:     "list",
+		Short:   "List all registered worker agents",
+		Long:    `Show the status of all worker agents registered with the control-plane AgentGateway.`,
 		Example: `  ai-services catalog agent list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
@@ -35,10 +35,14 @@ func newListCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "AGENT NAME\tSTATUS\tLAST HEARTBEAT\tLABELS")
+			fmt.Fprintln(w, "AGENT NAME\tSTATUS\tWORKER IP\tLAST HEARTBEAT\tLABELS")
 			for _, a := range agents {
 				agentName, _ := a["agent_name"].(string)
 				status, _ := a["status"].(string)
+				workerIP, _ := a["worker_ip"].(string)
+				if workerIP == "" {
+					workerIP = "—"
+				}
 				hb, _ := a["last_heartbeat"].(string)
 				if hb == "" {
 					hb = "—"
@@ -52,7 +56,7 @@ func newListCmd() *cobra.Command {
 						labels += fmt.Sprintf("%s=%v", k, v)
 					}
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", agentName, status, hb, labels)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", agentName, status, workerIP, hb, labels)
 			}
 			w.Flush()
 
