@@ -87,9 +87,6 @@ func DeployAgentCaddy(ctx context.Context, opts Options) error {
 	if vals.Caddy.Image == "" {
 		return fmt.Errorf("agent configure: caddy.image not set in values.yaml")
 	}
-	if vals.Caddy.AdminPort == "" {
-		vals.Caddy.AdminPort = "0"
-	}
 	// CLI flag overrides values.yaml; fall back to values.yaml default (443).
 	if opts.HTTPSPort > 0 {
 		vals.Caddy.HTTPSPort = opts.HTTPSPort

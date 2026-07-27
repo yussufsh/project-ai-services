@@ -5,7 +5,8 @@ metadata:
   labels:
     ai-services.io/component: "agent-proxy"
   annotations:
-    # Admin API on a random loopback port (adminPort=0 → OS-assigned).
+    # adminPort is intentionally empty — podman kube play treats an empty host
+    # port as "assign a random OS port", which is what we want for the admin API.
     # Resolved at runtime via pod inspection — never reachable from outside.
     ai-services.io/ports: "127.0.0.1:{{ .Values.caddy.adminPort }}:2019, {{ .Values.caddy.httpsPort }}:443"
 spec:
@@ -18,7 +19,7 @@ spec:
       env:
         - name: CADDY_ADMIN
           # Bind to all interfaces inside the container so the host-side
-          # 127.0.0.1:2019:2019 port mapping can reach it.
+          # port mapping (127.0.0.1:<random>:2019) can reach it.
           value: "0.0.0.0:2019"
       volumeMounts:
         - name: caddy-data
