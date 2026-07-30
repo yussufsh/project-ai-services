@@ -1169,15 +1169,6 @@ func (d *PodmanDeployer) registerApplicationRoutes(ctx context.Context, plan *De
 // stream directly to the worker's Caddy instance — no CADDY_ADMIN_URL needed
 // on the control plane for remote workers.
 func (d *PodmanDeployer) getCaddyConfiguration(ctx context.Context) (string, string, proxy.ProxyManager, error) {
-	// Get domain suffix from env var (set during catalog configure)
-	// This is pre-computed: certDomain OR customDomain OR hostIP.nip.io
-	domainSuffix := utils.GetEnv("DOMAIN_SUFFIX", "")
-	if domainSuffix == "" {
-		return "", "", nil, fmt.Errorf("DOMAIN_SUFFIX environment variable not set")
-	}
-
-	httpsPort := utils.GetEnv("CADDY_HTTPS_PORT", catalogconstants.DefaultHTTPSPort)
-
 	rt := d.runtime
 	switch rt.Type() {
 	case runtimetypes.RuntimeTypeRemotePodman, runtimetypes.RuntimeTypeRemoteOpenShift:
@@ -1198,8 +1189,17 @@ func (d *PodmanDeployer) getCaddyConfiguration(ctx context.Context) (string, str
 			workerDomainSuffix = fmt.Sprintf("%s.nip.io", strings.ReplaceAll(workerIP, ".", "-"))
 		}
 		logger.InfofCtx(ctx, "getCaddyConfiguration: remote agent — using worker domain suffix %s\n", workerDomainSuffix)
-		return workerDomainSuffix, httpsPort, proxy.NewRuntimeProxyManager(ctx, rt), nil
+		// TODO: Fetch the worker https configuration; ie. metadata including other configurations
+		return workerDomainSuffix, "443", proxy.NewRuntimeProxyManager(ctx, rt), nil
 	default:
+		// Get domain suffix from env var (set during catalog configure)
+		// This is pre-computed: certDomain OR customDomain OR hostIP.nip.io
+		domainSuffix := utils.GetEnv("DOMAIN_SUFFIX", "")
+		if domainSuffix == "" {
+			return "", "", nil, fmt.Errorf("DOMAIN_SUFFIX environment variable not set")
+		}
+		httpsPort := utils.GetEnv("CADDY_HTTPS_PORT", catalogconstants.DefaultHTTPSPort)
+
 		// Local Podman: use the control-plane Caddy via CADDY_ADMIN_URL.
 		proxyManager, err := proxy.GetCaddyProxyManager()
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/project-ai-services/ai-services/internal/pkg/constants"
 	runtimetypes "github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 )
 
@@ -20,13 +21,15 @@ func NewLocalCaddyManagerAdapter(pm ProxyManager) *LocalCaddyManagerAdapter {
 	return &LocalCaddyManagerAdapter{pm: pm}
 }
 
-// NewLocalCaddyManagerFromEnv creates an adapter using the CADDY_ADMIN_URL env var.
-// Returns an error if the env var is not set.
-func NewLocalCaddyManagerFromEnv() (*LocalCaddyManagerAdapter, error) {
-	pm, err := GetCaddyProxyManager()
-	if err != nil {
-		return nil, fmt.Errorf("local caddy manager: %w", err)
+// NewLocalCaddyManagerFromEnv creates an adapter from the given adminURL.
+// Uses AgentCaddyServerName because this is always called from the worker agent
+// container where adminURL points to the worker Caddy instance.
+// Returns an error if adminURL is empty.
+func NewLocalCaddyManagerFromEnv(adminURL string) (*LocalCaddyManagerAdapter, error) {
+	if adminURL == "" {
+		return nil, fmt.Errorf("CADDY_ADMIN_URL environment variable not set")
 	}
+	pm := NewCaddyManager(adminURL, constants.AgentCaddyServerName)
 	return NewLocalCaddyManagerAdapter(pm), nil
 }
 

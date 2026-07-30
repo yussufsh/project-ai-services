@@ -21,30 +21,41 @@ func newConfigureCmd() *cobra.Command {
 		domainName  string
 		sslCertPath string
 		sslKeyPath  string
+		// Agent container parameters
+		agentServer string
+		agentName   string
+		agentToken  string
 	)
-
-	const defaultHTTPSPort = 443
 
 	cmd := &cobra.Command{
 		Use:   "configure",
-		Short: "Set up the Worker-side Caddy proxy pod (run once before agent start)",
-		Long: `Deploy the agent Caddy pod on this Worker LPAR.
-
-The Worker Caddy listens on hostPort 443 (default) for external HTTPS traffic.
-Its admin API is bound to a random loopback port assigned by the OS at runtime.
-
-This command is idempotent — re-running it will remove any existing pod
-and redeploy fresh to ensure the correct port bindings are in place.
-
-Run this once after 'ai-services bootstrap configure', before 'agent start'.`,
-		Example: `  ai-services agent configure --runtime podman
-		ai-services agent configure --runtime podman --base-dir /custom/path
-		ai-services agent configure --runtime podman --https-port 8443`,
+		Short: "Deploy the agent and Caddy pods on this Worker LPAR",
+		Long: "Deploy two pods on this Worker LPAR:\n\n" +
+			"  ai-services--agent-caddy  Caddy reverse-proxy for external HTTPS traffic to\n" +
+			"                            deployed service pods. Admin API bound to a random\n" +
+			"                            loopback port assigned at runtime.\n\n" +
+			"  ai-services--agent        Agent daemon. Connects to the control-plane\n" +
+			"                            AgentGateway and executes runtime commands on\n" +
+			"                            behalf of the control plane.\n\n" +
+			"This command is idempotent — re-running removes any existing pods and\n" +
+			"redeploys fresh.\n\n" +
+			"Run once after 'ai-services bootstrap configure'.",
+		Example: "  ai-services agent configure --runtime podman --server lpar-0.example.com:9090 --name lpar-1 --token <token>\n" +
+			"  ai-services agent configure --runtime podman --server lpar-0.example.com:9090 --name lpar-1 --token <token> --https-port 8443",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
 
 			if runtimeName == "" {
 				return fmt.Errorf("--runtime is required (podman or openshift)")
+			}
+			if agentServer == "" {
+				return fmt.Errorf("--server is required (control-plane AgentGateway address, e.g. lpar-0.example.com:9090)")
+			}
+			if agentName == "" {
+				return fmt.Errorf("--name is required (name to register this agent under)")
+			}
+			if agentToken == "" {
+				return fmt.Errorf("--token is required (obtain via: ai-services catalog agent issue-token)")
 			}
 
 			var (
@@ -64,17 +75,23 @@ Run this once after 'ai-services bootstrap configure', before 'agent start'.`,
 			defer cancel()
 
 			return agentconfigure.DeployAgentCaddy(ctx, agentconfigure.Options{
-				BaseDir:     resolvedDir,
-				Runtime:     runtimeName,
-				HTTPSPort:   httpsPort,
-				DomainName:  domainName,
-				SSLCertPath: sslCertPath,
-				SSLKeyPath:  sslKeyPath,
+				BaseDir:      resolvedDir,
+				Runtime:      runtimeName,
+				HTTPSPort:    httpsPort,
+				DomainName:   domainName,
+				SSLCertPath:  sslCertPath,
+				SSLKeyPath:   sslKeyPath,
+				AgentServer:  agentServer,
+				AgentName:    agentName,
+				AgentToken:   agentToken,
 			})
 		},
 	}
 
 	cmd.Flags().StringVarP(&runtimeName, "runtime", "r", "", "Local container runtime: podman or openshift (required)")
+	cmd.Flags().StringVar(&agentServer, "server", "", "Control-plane AgentGateway address (host:port, required)")
+	cmd.Flags().StringVar(&agentName, "name", "", "Name to register this agent under (required)")
+	cmd.Flags().StringVar(&agentToken, "token", "", "Single-use bootstrap token (from: ai-services catalog agent issue-token, required)")
 	cmd.Flags().StringVar(&baseDir, "base-dir", "", fmt.Sprintf("Root data directory on this Worker LPAR (default: %s)", constants.DefaultBaseDir))
 	cmd.Flags().IntVar(&httpsPort, "https-port", 443, "Host port Caddy listens on for external HTTPS traffic")
 	cmd.Flags().StringVar(&domainName, "domain-name", "", "Custom domain name for service routes (e.g. example.com). Defaults to <worker-ip>.nip.io")

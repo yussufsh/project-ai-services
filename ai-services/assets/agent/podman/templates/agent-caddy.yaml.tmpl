@@ -18,8 +18,6 @@ spec:
       args: ["caddy", "run", "--config", "/data/caddy/Caddyfile"]
       env:
         - name: CADDY_ADMIN
-          # Bind to all interfaces inside the container so the host-side
-          # port mapping (127.0.0.1:<random>:2019) can reach it.
           value: "0.0.0.0:2019"
       volumeMounts:
         - name: caddy-data

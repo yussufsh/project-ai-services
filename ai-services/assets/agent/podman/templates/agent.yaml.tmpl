@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "ai-services--agent"
+  labels:
+    ai-services.io/component: "agent"
+spec:
+  restartPolicy: always
+  containers:
+    - name: agent
+      image: "{{ .Values.agent.image }}"
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          exec /usr/bin/ai-services agent start \
+            --runtime=podman \
+            --server="${AGENT_SERVER}" \
+            --name="${AGENT_NAME}" \
+            --token="${AGENT_TOKEN}"
+      env:
+        - name: AI_SERVICES_LOG_FORMAT
+          value: "service"
+        - name: AI_SERVICES_LOG_LEVEL
+          value: "info"
+        - name: AI_SERVICES_BASE_DIR
+          value: "{{ .BaseDir }}"
+        - name: CADDY_ADMIN_URL
+          # The agent-caddy pod is a separate Podman pod; its name resolves via
+          # Podman internal DNS from within this container's network namespace.
+          value: "http://ai-services--agent-caddy:2019"
+        - name: AGENT_SERVER
+          value: "{{ .AgentServer }}"
+        - name: AGENT_NAME
+          value: "{{ .AgentName }}"
+        - name: AGENT_TOKEN
+          value: "{{ .AgentToken }}"
+        - name: CONTAINER_HOST
+          value: "unix://{{ .PodmanSocketPath }}"
+        - name: REGISTRY_AUTH_FILE
+          value: "/run/containers/auth.json"
+      volumeMounts:
+        - name: podman-socket
+          mountPath: {{ .PodmanSocketPath }}
+        - name: podman-auth
+          mountPath: /run/containers/auth.json
+          subPath: auth.json
+          readOnly: true
+        - name: agent-data
+          mountPath: {{ .BaseDir }}
+      resources:
+        requests:
+          memory: "256Mi"
+        limits:
+          memory: "512Mi"
+      livenessProbe:
+        exec:
+          command: ["/bin/sh", "-c", "pgrep -x ai-services"]
+        initialDelaySeconds: 10
+        periodSeconds: 30
+        timeoutSeconds: 5
+        failureThreshold: 3
+
+  volumes:
+    - name: podman-socket
+      hostPath:
+        path: {{ .PodmanSocketPath }}
+        type: Socket
+    - name: podman-auth
+      secret:
+        secretName: podman-auth-secret
+    - name: agent-data
+      hostPath:
+        path: {{ .BaseDir }}
+        type: DirectoryOrCreate
