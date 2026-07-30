@@ -12,6 +12,7 @@ package configure
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,10 +39,11 @@ const (
 	// AgentCaddyPodName is the fixed name of the worker Caddy pod.
 	AgentCaddyPodName = "ai-services--agent-caddy"
 
-	agentCaddyfileSubDir = "agent/caddy"
-	agentPodTmplName     = "agent/podman/templates/agent.yaml.tmpl"
-	agentCaddyTmplName   = "agent/podman/templates/agent-caddy.yaml.tmpl"
-	agentCaddyfileTmpl   = "agent/podman/templates/agent-caddyfile.tmpl"
+	agentCaddyfileSubDir  = "agent/caddy"
+	agentPodTmplName      = "agent/podman/templates/agent.yaml.tmpl"
+	agentCaddyTmplName    = "agent/podman/templates/agent-caddy.yaml.tmpl"
+	agentCaddyfileTmpl    = "agent/podman/templates/agent-caddyfile.tmpl"
+	agentAuthSecretTmpl   = "agent/podman/templates/agent-auth-secret.yaml.tmpl"
 
 	dirPerm  = 0o755
 	filePerm = 0o644
@@ -138,7 +140,12 @@ func DeployAgentCaddy(ctx context.Context, opts Options) error {
 		return fmt.Errorf("agent configure: Caddy health check failed: %w", err)
 	}
 
-	// Step 4 — deploy the agent daemon pod.
+	// Step 4 — ensure podman-auth-secret exists so the agent pod can pull images.
+	if err := createPodmanAuthSecret(ctx, rt); err != nil {
+		return fmt.Errorf("agent configure: create podman auth secret: %w", err)
+	}
+
+	// Step 5 — deploy the agent daemon pod.
 	if err := redeployPod(ctx, rt, AgentPodName, func() error {
 		return deployAgentPod(ctx, rt, opts, vals)
 	}); err != nil {
@@ -224,6 +231,60 @@ func deployAgentPod(ctx context.Context, rt *podman.PodmanClient, opts Options, 
 			},
 		},
 	})
+}
+
+// createPodmanAuthSecret creates or replaces podman-auth-secret on the worker,
+// using the agent-auth-secret.yaml.tmpl template — the same pattern as the catalog.
+func createPodmanAuthSecret(ctx context.Context, rt *podman.PodmanClient) error {
+	authFilePath, err := utils.GetAuthFilePath()
+	if err != nil {
+		return fmt.Errorf("resolve auth file path: %w", err)
+	}
+
+	authContent, err := os.ReadFile(authFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.WarningfCtx(ctx, "agent configure: auth.json not found at %s — image pulls may fail if registry requires auth\n", authFilePath)
+			authContent = []byte("{}")
+		} else {
+			return fmt.Errorf("read auth file %s: %w", authFilePath, err)
+		}
+	}
+
+	// If the secret already exists, delete it first so the content is refreshed.
+	exists, err := rt.SecretExists("podman-auth-secret")
+	if err != nil {
+		return fmt.Errorf("check secret existence: %w", err)
+	}
+	if exists {
+		if err := rt.DeleteSecret("podman-auth-secret"); err != nil {
+			return fmt.Errorf("delete existing secret: %w", err)
+		}
+	}
+
+	raw, err := assets.AgentFS.ReadFile(agentAuthSecretTmpl)
+	if err != nil {
+		return fmt.Errorf("read auth secret template: %w", err)
+	}
+
+	tmpl, err := template.New("agent-auth-secret.yaml.tmpl").Parse(string(raw))
+	if err != nil {
+		return fmt.Errorf("parse auth secret template: %w", err)
+	}
+
+	var rendered bytes.Buffer
+	if err := tmpl.Execute(&rendered, map[string]any{
+		"AuthFileContent": base64.StdEncoding.EncodeToString(authContent),
+	}); err != nil {
+		return fmt.Errorf("render auth secret template: %w", err)
+	}
+
+	if _, err := rt.CreatePod(bytes.NewReader(rendered.Bytes()), map[string]string{}); err != nil {
+		return fmt.Errorf("create podman-auth-secret via kube play: %w", err)
+	}
+
+	logger.InfofCtx(ctx, "agent configure: podman-auth-secret created\n")
+	return nil
 }
 
 // renderAndDeploy is a shared helper: reads tmplPath, renders it with params,
