@@ -927,6 +927,26 @@ func (kc *OpenshiftClient) DeleteNamespace(ctx context.Context, name string) err
 	return nil
 }
 
+// RegisterProxyRoute is not implemented on OpenShift (no worker Caddy proxy).
+func (kc *OpenshiftClient) RegisterProxyRoute(_ context.Context, _ types.ProxyRoute) error {
+	return fmt.Errorf("RegisterProxyRoute not implemented on OpenShift runtime")
+}
+
+// UnregisterProxyRoute is not implemented on OpenShift (no worker Caddy proxy).
+func (kc *OpenshiftClient) UnregisterProxyRoute(_ context.Context, _ string) error {
+	return fmt.Errorf("UnregisterProxyRoute not implemented on OpenShift runtime")
+}
+
+// GetProxyRoute is not implemented on OpenShift (no worker Caddy proxy).
+func (kc *OpenshiftClient) GetProxyRoute(_ context.Context, _ string) (*types.ProxyRoute, error) {
+	return nil, fmt.Errorf("GetProxyRoute not implemented on OpenShift runtime")
+}
+
+// ProxyHealthCheck is not implemented on OpenShift (no worker Caddy proxy).
+func (kc *OpenshiftClient) ProxyHealthCheck(_ context.Context) error {
+	return fmt.Errorf("ProxyHealthCheck not implemented on OpenShift runtime")
+}
+
 // HTTPProxy is not implemented on OpenShift — the control plane manages
 // OpenShift pods directly via the Kubernetes API without needing a tunnel.
 func (kc *OpenshiftClient) HTTPProxy(_ context.Context, _, _ string, _ map[string]string, _ []byte) (*types.HTTPProxyResponse, error) {

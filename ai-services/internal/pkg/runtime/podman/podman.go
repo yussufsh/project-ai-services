@@ -40,8 +40,19 @@ const (
 	execCommandFixedArgsCount = 2 // "exec" and containerID
 )
 
+// LocalCaddyManager is a narrow interface for managing Caddy routes on the
+// local worker node. It is injected into PodmanClient so the podman package
+// does not import the proxy package (which would cause an import cycle).
+type LocalCaddyManager interface {
+	RegisterRoute(ctx context.Context, route types.ProxyRoute) error
+	UnregisterRoute(ctx context.Context, routeID string) error
+	GetRoute(ctx context.Context, routeID string) (*types.ProxyRoute, error)
+	HealthCheck(ctx context.Context) error
+}
+
 type PodmanClient struct {
-	Context context.Context
+	Context  context.Context
+	caddyMgr LocalCaddyManager // nil until SetCaddyManager is called
 }
 
 // NewPodmanClient creates and returns a new PodmanClient instance.
@@ -872,6 +883,51 @@ func (pc *PodmanClient) ExecInContainerWithCmd(_ context.Context, _, _ string, _
 	logger.Errorf("unsupported method called!")
 
 	return "", fmt.Errorf("unsupported method")
+}
+
+// ─── Proxy operations – Caddy management on the local worker node ─────────────
+
+// SetCaddyManager injects a LocalCaddyManager so the Podman runtime can manage
+// the worker's Caddy instance without importing the proxy package (import cycle).
+// Call once after constructing PodmanClient, e.g. from the worker join command.
+func (pc *PodmanClient) SetCaddyManager(mgr LocalCaddyManager) {
+	pc.caddyMgr = mgr
+}
+
+// RegisterProxyRoute registers a route with the local Caddy instance.
+func (pc *PodmanClient) RegisterProxyRoute(ctx context.Context, route types.ProxyRoute) error {
+	if pc.caddyMgr == nil {
+		return fmt.Errorf("RegisterProxyRoute: Caddy manager not configured (call SetCaddyManager)")
+	}
+
+	return pc.caddyMgr.RegisterRoute(ctx, route)
+}
+
+// UnregisterProxyRoute removes a route from the local Caddy instance.
+func (pc *PodmanClient) UnregisterProxyRoute(ctx context.Context, routeID string) error {
+	if pc.caddyMgr == nil {
+		return fmt.Errorf("UnregisterProxyRoute: Caddy manager not configured (call SetCaddyManager)")
+	}
+
+	return pc.caddyMgr.UnregisterRoute(ctx, routeID)
+}
+
+// GetProxyRoute retrieves a route by ID from the local Caddy instance.
+func (pc *PodmanClient) GetProxyRoute(ctx context.Context, routeID string) (*types.ProxyRoute, error) {
+	if pc.caddyMgr == nil {
+		return nil, fmt.Errorf("GetProxyRoute: Caddy manager not configured (call SetCaddyManager)")
+	}
+
+	return pc.caddyMgr.GetRoute(ctx, routeID)
+}
+
+// ProxyHealthCheck verifies the local Caddy instance is reachable.
+func (pc *PodmanClient) ProxyHealthCheck(ctx context.Context) error {
+	if pc.caddyMgr == nil {
+		return fmt.Errorf("ProxyHealthCheck: Caddy manager not configured (call SetCaddyManager)")
+	}
+
+	return pc.caddyMgr.HealthCheck(ctx)
 }
 
 // ─── HTTP proxy tunnel ────────────────────────────────────────────────────────

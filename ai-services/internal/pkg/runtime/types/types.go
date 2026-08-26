@@ -80,3 +80,14 @@ type HTTPProxyResponse struct {
 	Headers    map[string]string
 	Body       []byte
 }
+
+// ProxyRoute represents a Caddy reverse-proxy route on a worker node.
+// Kept in runtime/types so the Runtime interface can reference it without
+// importing the proxy package (which would cause an import cycle).
+type ProxyRoute struct {
+	ID       string // unique route identifier used as @id in Caddy config
+	Domain   string // hostname to match (e.g. "service.example.com")
+	Upstream string // backend address (e.g. "10.88.0.5:8080")
+	Terminal bool   // stop route matching after this route
+	Type     string // endpoint type label (e.g. "ui", "api")
+}

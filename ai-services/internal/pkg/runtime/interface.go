@@ -59,6 +59,16 @@ type Runtime interface {
 	// System information
 	GetSystemInfo(ctx context.Context) (*models.SystemInfo, error)
 
+	// Proxy operations – Caddy management on the worker node.
+	// RegisterProxyRoute registers a route with the worker's local Caddy instance.
+	RegisterProxyRoute(ctx context.Context, route types.ProxyRoute) error
+	// UnregisterProxyRoute removes a route from the worker's local Caddy instance.
+	UnregisterProxyRoute(ctx context.Context, routeID string) error
+	// GetProxyRoute retrieves a route by ID from the worker's local Caddy instance.
+	GetProxyRoute(ctx context.Context, routeID string) (*types.ProxyRoute, error)
+	// ProxyHealthCheck verifies the worker's local Caddy instance is reachable.
+	ProxyHealthCheck(ctx context.Context) error
+
 	// HTTPProxy tunnels an HTTP request through the gRPC stream to a worker
 	// pod endpoint and returns the response.
 	// method is the HTTP verb (GET, POST, …), targetURL is the full URL of the
