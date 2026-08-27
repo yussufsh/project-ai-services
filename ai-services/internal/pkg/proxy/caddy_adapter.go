@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/project-ai-services/ai-services/internal/pkg/constants"
+	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
 	runtimetypes "github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 )
 
@@ -26,6 +28,22 @@ func NewLocalCaddyManagerFromEnv() (*LocalCaddyManagerAdapter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("local caddy manager: %w", err)
 	}
+
+	return NewLocalCaddyManagerAdapter(pm), nil
+}
+
+// NewLocalCaddyManagerFromPod discovers the Caddy admin port by inspecting the
+// named pod via the runtime, then creates an adapter pointing at
+// http://localhost:<port>. Use this on the worker side after Setup has deployed
+// the Caddy pod, when CADDY_ADMIN_URL is not set in the environment.
+func NewLocalCaddyManagerFromPod(ctx context.Context, rt runtime.Runtime, podName string) (*LocalCaddyManagerAdapter, error) {
+	adminPort, err := GetCaddyAdminPort(ctx, rt, podName)
+	if err != nil {
+		return nil, fmt.Errorf("local caddy manager: discover admin port: %w", err)
+	}
+
+	adminURL := fmt.Sprintf("http://localhost:%s", adminPort)
+	pm := NewCaddyManager(adminURL, constants.CaddyServerName)
 
 	return NewLocalCaddyManagerAdapter(pm), nil
 }
