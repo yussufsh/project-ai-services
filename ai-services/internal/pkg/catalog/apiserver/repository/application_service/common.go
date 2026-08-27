@@ -621,6 +621,12 @@ func (s *ApplicationServiceBase) ListApplications(ctx context.Context, req ListA
 // CreateApplication validates, plans, persists, and asynchronously deploys a new application
 // for the given runtime type.
 func (s *ApplicationServiceBase) CreateApplication(ctx context.Context, req apimodels.CreateApplicationRequest, runtimeType runtimeTypes.RuntimeType) (*apimodels.CreateApplicationResponse, error) {
+	// Phase 0: if a worker name is given verify the worker is connected now,
+	// before touching the database, so callers get an immediate 400 error.
+	if err := s.DeploymentExecutor.ValidateWorker(req.WorkerName); err != nil {
+		return nil, &ValidationError{Code: http.StatusBadRequest, Message: err.Error()}
+	}
+
 	// Phase 1: check for duplicate name
 	existingApp, err := s.AppRepo.GetByName(ctx, req.Name)
 	if err != nil {

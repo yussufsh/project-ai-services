@@ -59,6 +59,25 @@ func (e *DeploymentExecutor) WithWorkerRegistry(reg remoteRuntime.WorkerRegistry
 	return e
 }
 
+// ValidateWorker returns an error immediately if workerName is non-empty but
+// the worker is not currently connected. This is called synchronously before
+// any DB records are created so the API can return 400/409 straight away.
+func (e *DeploymentExecutor) ValidateWorker(workerName string) error {
+	if workerName == "" {
+		return nil
+	}
+
+	if e.workerRegistry == nil {
+		return fmt.Errorf("worker deployment is not configured on this server")
+	}
+
+	if _, ok := e.workerRegistry.WorkerRuntimeType(workerName); !ok {
+		return fmt.Errorf("worker %q is not connected", workerName)
+	}
+
+	return nil
+}
+
 // ExecuteWithPlan executes deployment using an existing plan.
 // This is used when the plan has already been created and database records inserted.
 func (e *DeploymentExecutor) ExecuteWithPlan(
