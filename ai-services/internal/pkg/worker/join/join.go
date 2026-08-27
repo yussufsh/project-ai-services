@@ -29,7 +29,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
+	"github.com/project-ai-services/ai-services/internal/pkg/proxy"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime"
+	podmanruntime "github.com/project-ai-services/ai-services/internal/pkg/runtime/podman"
 	"github.com/project-ai-services/ai-services/internal/pkg/runtime/types"
 	"github.com/project-ai-services/ai-services/internal/pkg/utils"
 	workercaddy "github.com/project-ai-services/ai-services/internal/pkg/worker/caddy"
@@ -90,6 +92,19 @@ func Run(ctx context.Context, opts Options) error {
 	rt, err := runtime.CreateRuntime(opts.RuntimeType, "")
 	if err != nil {
 		return fmt.Errorf("worker join: init runtime: %w", err)
+	}
+
+	// Wire the local Caddy manager into the Podman runtime so that proxy-route
+	// commands dispatched over the gRPC stream (REGISTER/UNREGISTER/GET_PROXY_ROUTE,
+	// PROXY_HEALTH_CHECK) can manage routes on the worker's Caddy instance.
+	// This is only applicable for Podman; OpenShift uses native routes.
+	if pc, ok := rt.(*podmanruntime.PodmanClient); ok {
+		caddyMgr, err := proxy.NewLocalCaddyManagerFromEnv()
+		if err != nil {
+			logger.WarningfCtx(ctx, "worker join: could not initialise local Caddy manager (%v) — proxy route commands will fail\n", err)
+		} else {
+			pc.SetCaddyManager(caddyMgr)
+		}
 	}
 
 	// ── Step 1: Setup worker node ────────────────────────────────────────────

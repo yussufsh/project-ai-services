@@ -52,6 +52,15 @@ type (
 	SpyreCardPool  = deploymenttypes.SpyreCardPool
 )
 
+// PodmanWorkerConfig holds the Caddy configuration needed when deploying to a remote
+// worker node. All three fields are required together — they are always sourced
+// from the worker's registration metadata.
+type PodmanWorkerConfig struct {
+	ProxyManager proxy.ProxyManager
+	DomainSuffix string
+	HTTPSPort    string
+}
+
 // PodmanDeployer implements deployment execution for Podman runtime.
 type PodmanDeployer struct {
 	runtime         runtime.Runtime
@@ -59,6 +68,10 @@ type PodmanDeployer struct {
 	appRepo         repository.ApplicationRepository
 	serviceRepo     repository.ServiceRepository
 	componentRepo   repository.ComponentRepository
+
+	// workerConfig is set when deploying to a remote worker.
+	// When non-nil, getCaddyConfiguration uses it instead of the local Caddy env vars.
+	workerConfig *PodmanWorkerConfig
 }
 
 // NewPodmanDeployer creates a new PodmanDeployer instance.
@@ -1099,6 +1112,12 @@ func (d *PodmanDeployer) registerApplicationRoutes(ctx context.Context, plan *De
 	logger.InfofCtx(ctx, "Successfully registered routes and updated endpoints for application '%s'\n", plan.ApplicationName)
 
 	return nil
+}
+
+// SetPodmanWorkerConfig injects the Caddy configuration for a remote worker deployment.
+// When set, getCaddyConfiguration uses these values instead of local env vars.
+func (d *PodmanDeployer) SetPodmanWorkerConfig(cfg PodmanWorkerConfig) {
+	d.workerConfig = &cfg
 }
 
 // getCaddyConfiguration retrieves Caddy configuration and creates a ProxyManager.

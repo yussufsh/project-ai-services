@@ -16,4 +16,8 @@ type WorkerRegistry interface {
 	// WorkerRuntimeType returns the runtime type string declared by the worker at
 	// registration time, or ("", false) if the worker is not connected.
 	WorkerRuntimeType(workerName string) (string, bool)
+
+	// WorkerMetadata returns the metadata map sent by the worker during Register,
+	// or (nil, false) if the worker is not connected.
+	WorkerMetadata(workerName string) (map[string]string, bool)
 }

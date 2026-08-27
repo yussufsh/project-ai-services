@@ -52,6 +52,7 @@ type WorkerEntry struct {
 
 	WorkerName  string
 	RuntimeType string
+	Metadata    map[string]string
 
 	// CommandCh is written by RemoteRuntime to send commands to this worker.
 	// The gateway goroutine reads from it and writes to the gRPC stream.
@@ -125,6 +126,7 @@ func (r *Registry) Register(ctx context.Context, workerName, runtimeType string,
 	entry := &WorkerEntry{
 		WorkerName:  workerName,
 		RuntimeType: runtimeType,
+		Metadata:    metadata,
 		CommandCh:   make(chan *workerpb.Command, commandChannelSize),
 		results:     make(map[string]chan *workerpb.CommandResult),
 	}
@@ -331,6 +333,19 @@ func (r *Registry) WorkerRuntimeType(workerName string) (string, bool) {
 	}
 
 	return entry.RuntimeType, true
+}
+
+// WorkerMetadata returns the metadata map for the named worker.
+// It satisfies the runtime/remote.WorkerRegistry interface.
+func (r *Registry) WorkerMetadata(workerName string) (map[string]string, bool) {
+	r.mu.RLock()
+	entry, ok := r.workers[workerName]
+	r.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+
+	return entry.Metadata, true
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
