@@ -213,6 +213,13 @@ func handle(ctx context.Context, rt runtime.Runtime, pr *workercaddy.ProxyRouter
 		return nil, rt.ContainerLogs(ctx, req.NameOrID)
 
 	case workerpb.CommandType_COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER:
+		// Distinguish ephemeral-container runs (DownloadModel payload, Model != "")
+		// from exec-in-existing-container (ExecInContainer payload, PodName != "").
+		var dm payload.DownloadModel
+		if err := json.Unmarshal(p, &dm); err == nil && dm.Model != "" {
+			return nil, rt.RunEphemeralContainer(ctx, dm.Model, dm.ModelsPath, dm.ToolImage)
+		}
+
 		var req payload.ExecInContainer
 		if err := json.Unmarshal(p, &req); err != nil {
 			return nil, fmt.Errorf("decode run_ephemeral_container payload: %w", err)

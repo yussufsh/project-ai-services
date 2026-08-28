@@ -26,6 +26,7 @@ import (
 	"github.com/containers/podman/v5/pkg/bindings/volumes"
 	"github.com/containers/podman/v5/pkg/domain/entities"
 	"github.com/containers/podman/v5/pkg/specgen"
+	ocispec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/project-ai-services/ai-services/internal/pkg/accelerator/spyre"
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
 	"github.com/project-ai-services/ai-services/internal/pkg/logger"
@@ -1041,4 +1042,38 @@ func (pc *PodmanClient) podNameToIP(podName string) (string, error) {
 	}
 
 	return ip, nil
+}
+
+// ─── Model download ───────────────────────────────────────────────────────────
+
+// RunEphemeralContainer runs a tools container to pull model into modelsPath.
+// toolImage is the container image used for the download (e.g. vars.ToolImage).
+func (pc *PodmanClient) RunEphemeralContainer(ctx context.Context, model, modelsPath, toolImage string) error {
+	s := specgen.NewSpecGenerator(toolImage, false)
+	terminal := true
+	stdin := true
+	rm := true
+	s.Terminal = &terminal
+	s.Stdin = &stdin
+	s.Remove = &rm
+	s.Command = []string{"hf", "download", model, "--local-dir", fmt.Sprintf("/models/%s", model)}
+	s.Mounts = []ocispec.Mount{
+		{
+			Type:        "bind",
+			Source:      modelsPath,
+			Destination: "/models",
+			Options:     []string{"Z"},
+		},
+	}
+
+	exitCode, err := pc.RunContainerWithSpec(ctx, s)
+	if err != nil {
+		return fmt.Errorf("download model %s: %w", model, err)
+	}
+
+	if exitCode != 0 {
+		return fmt.Errorf("download model %s: container exited with code %d", model, exitCode)
+	}
+
+	return nil
 }

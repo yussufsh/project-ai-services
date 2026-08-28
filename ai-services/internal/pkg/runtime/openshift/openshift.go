@@ -952,3 +952,9 @@ func (kc *OpenshiftClient) ProxyHealthCheck(_ context.Context) error {
 func (kc *OpenshiftClient) HTTPProxy(_ context.Context, _, _ string, _ map[string]string, _ []byte) (*types.HTTPProxyResponse, error) {
 	return nil, fmt.Errorf("HTTPProxy not implemented on OpenShift runtime")
 }
+
+// RunEphemeralContainer is not applicable on OpenShift — models are managed via
+// serving runtimes and PVCs, not downloaded locally.
+func (kc *OpenshiftClient) RunEphemeralContainer(_ context.Context, _, _, _ string) error {
+	return fmt.Errorf("RunEphemeralContainer not implemented on OpenShift runtime")
+}

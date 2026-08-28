@@ -6,8 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/podman/v5/pkg/specgen"
-	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/project-ai-services/ai-services/assets"
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
@@ -79,44 +77,10 @@ func DownloadModel(ctx context.Context, model, targetDir string) error {
 func DownloadModelContainer(ctx context.Context, model, targetDir string) error {
 	logger.InfofCtx(ctx, "Downloading model %s to %s\n", model, targetDir)
 
-	// Get Podman client
-	runtimeClient, err := podman.NewPodmanClient()
+	pc, err := podman.NewPodmanClient()
 	if err != nil {
 		return fmt.Errorf("failed to create podman client: %w", err)
 	}
 
-	// Create container spec
-	s := specgen.NewSpecGenerator(vars.ToolImage, false)
-	terminal := true
-	stdin := true
-	s.Terminal = &terminal
-	s.Stdin = &stdin
-	s.Command = []string{"hf", "download", model, "--local-dir", fmt.Sprintf("/models/%s", model)}
-	rm := true
-	s.Remove = &rm
-
-	// Convert mounts
-	s.Mounts = []spec.Mount{
-		{
-			Type:        "bind",
-			Source:      targetDir,
-			Destination: "/models",
-			Options:     []string{"Z"},
-		},
-	}
-
-	// Run container with spec, passing ctx so cancellation (e.g. mid-deployment delete)
-	// stops the download container immediately instead of blocking until it finishes.
-	exitCode, err := runtimeClient.RunContainerWithSpec(ctx, s)
-	if err != nil {
-		return fmt.Errorf("failed to run container: %w", err)
-	}
-
-	if exitCode != 0 {
-		return fmt.Errorf("model download failed with exit code %d", exitCode)
-	}
-
-	logger.InfolnCtx(ctx, "Model downloaded successfully")
-
-	return nil
+	return pc.RunEphemeralContainer(ctx, model, targetDir, vars.ToolImage)
 }

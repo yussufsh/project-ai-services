@@ -20,7 +20,6 @@ import (
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/db/repository"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/types"
 	catalogutils "github.com/project-ai-services/ai-services/internal/pkg/catalog/utils"
-	"github.com/project-ai-services/ai-services/internal/pkg/cli/helpers"
 	clipodman "github.com/project-ai-services/ai-services/internal/pkg/cli/podman"
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
 	"github.com/project-ai-services/ai-services/internal/pkg/constants"
@@ -230,14 +229,16 @@ func (d *PodmanDeployer) extractModelsFromParams(params map[string]any, modelSet
 	}
 }
 
-// downloadModels downloads all models in the provided set.
+// downloadModels downloads all models in the provided set via the runtime.
+// For local Podman this runs a tools container directly; for a RemoteRuntime
+// the call is forwarded to the worker over gRPC.
 func (d *PodmanDeployer) downloadModels(ctx context.Context, modelSet map[string]bool) error {
 	modelsPath := utils.GetModelsPath()
 
 	for modelName := range modelSet {
 		logger.InfofCtx(ctx, "Downloading model: %s\n", modelName)
 
-		if err := helpers.DownloadModelContainer(ctx, modelName, modelsPath); err != nil {
+		if err := d.runtime.RunEphemeralContainer(ctx, modelName, modelsPath, vars.ToolImage); err != nil {
 			return fmt.Errorf("failed to download model %s: %w", modelName, err)
 		}
 	}

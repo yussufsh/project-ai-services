@@ -57,6 +57,15 @@ type ExecInContainer struct {
 	Command       []string `json:"command"`
 }
 
+// DownloadModel is the payload for COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER when
+// the operation is a model download (distinguished by non-empty Model field).
+// The worker runs a tools container to pull the model into ModelsPath.
+type DownloadModel struct {
+	Model      string `json:"model"`
+	ModelsPath string `json:"modelsPath"`
+	ToolImage  string `json:"toolImage"`
+}
+
 // ─── Network ──────────────────────────────────────────────────────────────────
 
 type ListRoutes struct {

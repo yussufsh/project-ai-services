@@ -59,6 +59,12 @@ type Runtime interface {
 	// System information
 	GetSystemInfo(ctx context.Context) (*models.SystemInfo, error)
 
+	// RunEphemeralContainer runs a tools container on the node to execute a
+	// one-shot workload (e.g. model download). On Podman it calls
+	// RunContainerWithSpec directly. On RemoteRuntime it dispatches
+	// COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER over the gRPC stream.
+	RunEphemeralContainer(ctx context.Context, model, modelsPath, toolImage string) error
+
 	// Proxy operations – Caddy management on the worker node.
 	// RegisterProxyRoute registers a route with the worker's local Caddy instance.
 	RegisterProxyRoute(ctx context.Context, route types.ProxyRoute) error

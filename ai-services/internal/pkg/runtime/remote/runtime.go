@@ -378,3 +378,14 @@ func unmarshalData(res *workerpb.CommandResult, v any) error {
 
 	return nil
 }
+
+// ─── Ephemeral container ──────────────────────────────────────────────────────
+
+// RunEphemeralContainer dispatches a one-shot container run to the worker over
+// the gRPC stream using COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER.
+func (r *RemoteRuntime) RunEphemeralContainer(ctx context.Context, model, modelsPath, toolImage string) error {
+	_, err := r.send(ctx, workerpb.CommandType_COMMAND_TYPE_RUN_EPHEMERAL_CONTAINER,
+		payload.DownloadModel{Model: model, ModelsPath: modelsPath, ToolImage: toolImage})
+
+	return err
+}
