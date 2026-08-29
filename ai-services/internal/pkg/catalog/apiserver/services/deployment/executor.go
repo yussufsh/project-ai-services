@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog"
 	apimodels "github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/models"
 	"github.com/project-ai-services/ai-services/internal/pkg/catalog/apiserver/services/deployment/repository/openshift"
@@ -54,6 +55,17 @@ func (e *DeploymentExecutor) WithWorkerRegistry(reg stream.WorkerRegistry) *Depl
 	e.workerRegistry = reg
 
 	return e
+}
+
+// WorkerDBID returns the database UUID for the named worker by consulting the
+// in-memory registry. Returns (uuid.Nil, false) when the worker is not
+// connected or the registry is nil (local-only server).
+func (e *DeploymentExecutor) WorkerDBID(workerName string) (uuid.UUID, bool) {
+	if e.workerRegistry == nil {
+		return uuid.Nil, false
+	}
+
+	return e.workerRegistry.WorkerID(workerName)
 }
 
 // ValidateWorker checks that workerName is non-empty and that the named worker

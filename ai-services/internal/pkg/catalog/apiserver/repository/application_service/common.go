@@ -466,6 +466,15 @@ func (s *ApplicationServiceBase) insertApplicationRecord(
 		CreatedBy:      createdBy,
 	}
 
+	// Attach the worker FK for remote worker deployments.
+	// Local deployments leave worker_id NULL until the local worker joins the registry.
+	// TODO: Remove the check when we use only workers for deployment.
+	if plan.WorkerName != "" && plan.WorkerName != workerconstants.LocalWorkerName {
+		if id, ok := s.DeploymentExecutor.WorkerDBID(plan.WorkerName); ok {
+			app.WorkerID = &id
+		}
+	}
+
 	if err := s.AppRepo.Insert(ctx, app); err != nil {
 		return fmt.Errorf("failed to insert application: %w", err)
 	}
