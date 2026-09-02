@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/project-ai-services/ai-services/internal/pkg/cli/templates"
+	"github.com/project-ai-services/ai-services/internal/pkg/utils"
 )
 
 // RouteEntryParts represents the parsed components of a route entry.
@@ -60,6 +61,11 @@ func ParseRouteEntry(routeEntry string) (*RouteEntryParts, error) {
 func BuildRoutesFromAnnotation(routesAnnotation, podName string) ([]Route, error) {
 	if routesAnnotation == "" {
 		return nil, nil
+	}
+
+	domainSuffix := utils.GetEnv(DomainSuffixEnvVar, "")
+	if domainSuffix == "" {
+		return nil, fmt.Errorf("%s environment variable not set", DomainSuffixEnvVar)
 	}
 
 	routes := []Route{}
