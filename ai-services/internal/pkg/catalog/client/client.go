@@ -20,6 +20,10 @@ const (
 	// which a proactive refresh is triggered. If the token expires in less than
 	// this duration it is considered "about to expire".
 	tokenRefreshSkew = 30 * time.Second
+
+	// httpStatusServiceUnavailable is the HTTP 503 status code returned by the
+	// OCP router when the catalog pod is not yet running.
+	httpStatusServiceUnavailable = 503
 )
 
 // Client is an authenticated HTTP client for the catalog API server.
@@ -160,7 +164,7 @@ func (c *Client) Login(ctx context.Context, username, password string) (LoginRes
 	}
 
 	if httpResp.IsError() {
-		return LoginResponse{}, fmt.Errorf("login failed: server returned HTTP %d: %s", httpResp.StatusCode(), httpResp.String())
+		return LoginResponse{}, fmt.Errorf("login failed: %w", httpError(c.serverURL, httpResp))
 	}
 
 	return resp, nil
@@ -180,7 +184,7 @@ func (c *Client) LoginWithMIQToken(ctx context.Context, miqToken string) (LoginR
 	}
 
 	if httpResp.IsError() {
-		return LoginResponse{}, fmt.Errorf("token login failed: server returned HTTP %d: %s", httpResp.StatusCode(), httpResp.String())
+		return LoginResponse{}, fmt.Errorf("token login failed: %w", httpError(c.serverURL, httpResp))
 	}
 
 	return resp, nil
@@ -238,7 +242,7 @@ func (c *Client) RefreshToken(ctx context.Context) error {
 	}
 
 	if httpResp.IsError() {
-		return fmt.Errorf("refresh token failed: server returned HTTP %d: %s", httpResp.StatusCode(), httpResp.String())
+		return fmt.Errorf("refresh token failed: %w", httpError(c.serverURL, httpResp))
 	}
 
 	c.creds.AccessToken = resp.AccessToken
@@ -300,6 +304,22 @@ func (c *Client) ServerURL() string {
 // HTTPClient returns the underlying resty client for making custom requests.
 func (c *Client) HTTPClient() *resty.Client {
 	return c.httpClient
+}
+
+// ---------------------------------------------------------------------------
+// HTTP / JWT helpers
+// ---------------------------------------------------------------------------
+
+// httpError returns a user-friendly error for a non-2xx HTTP response.
+// A 503 from the OCP router means the catalog pod is not running yet — in that
+// case the raw HTML "Application is not available" page is suppressed and a
+// clear message is returned instead.
+func httpError(serverURL string, resp *resty.Response) error {
+	if resp.StatusCode() == httpStatusServiceUnavailable {
+		return fmt.Errorf("catalog is not available — make sure the catalog service is running and reachable at %s", serverURL)
+	}
+
+	return fmt.Errorf("server returned HTTP %d: %s", resp.StatusCode(), resp.String())
 }
 
 // ---------------------------------------------------------------------------
