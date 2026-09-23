@@ -1,0 +1,14 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG REQS=requirements-docling-2.95.0.txt
+
+# Activate the existing venv from the base image, upgrade only the docling packages
+COPY ${REQS} /tmp/requirements-bisect.txt
+
+RUN source /var/venv/bin/activate && \
+    pip install --no-cache-dir \
+        --extra-index-url https://wheels.developerfirst.ibm.com/ppc64le/linux \
+        --prefer-binary \
+        -r /tmp/requirements-bisect.txt \
+        --upgrade-strategy only-if-needed
