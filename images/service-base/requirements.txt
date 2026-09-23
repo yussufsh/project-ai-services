@@ -21,7 +21,7 @@ docling==2.127.0
 docling-core==2.97.0
 docling-ibm-models==4.0.2
 docling-slim==2.127.0
-docling-parse==7.16.0
+docling-parse==7.21.0
 email-validator==2.3.0
 et_xmlfile==2.0.0
 Events==0.5
