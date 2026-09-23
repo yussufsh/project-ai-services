@@ -190,6 +190,7 @@ def get_doc_converter():
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
 
     # Accelerator & pipeline options
     pipeline_options = PdfPipelineOptions()
@@ -214,7 +215,16 @@ def get_doc_converter():
             InputFormat.PDF,
             InputFormat.DOCX
         ],
-        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
+        format_options={
+            InputFormat.PDF: PdfFormatOption(
+                pipeline_options=pipeline_options,
+                # Explicitly use the single-threaded backend.
+                # docling >= 2.123.0 changed the default to ThreadedDoclingParseDocumentBackend,
+                # which spawns a C++ thread pool. On ppc64le this adds scheduling overhead
+                # without the AVX/SIMD payoff it gets on x86_64, doubling ingestion time.
+                backend=DoclingParseDocumentBackend,
+            )
+        }
     )
 
     return doc_converter
