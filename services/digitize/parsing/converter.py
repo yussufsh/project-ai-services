@@ -207,7 +207,15 @@ def get_doc_converter():
         logger.debug("DOCLING_MODELS_PATH not set. Docling will use default model loading behavior.")
     
     pipeline_options.do_table_structure = True
-    pipeline_options.table_structure_options.do_cell_matching = True
+    # do_cell_matching was added when docling-ibm-models ~3.9.x (TableFormer v1) was in use,
+    # where cell matching was a cheap operation. docling-ibm-models 3.12.0 (Mar 2026) introduced
+    # TableFormer v2, whose cell-matching post-processing has quadratic complexity in the number
+    # of table cells and no SIMD acceleration on ppc64le. This caused the 60-124s per-batch
+    # spikes observed in PIPELINE_PROFILING logs, making 258-page ingestion take ~18 min.
+    # Setting this to False restores the pre-TFv2 timing: TableFormer still detects full table
+    # structure (rows, columns, headers) but text content is taken directly from the PDF's own
+    # text layer rather than being matched back through the model's cell predictions.
+    pipeline_options.table_structure_options.do_cell_matching = False
     pipeline_options.do_ocr = False
 
     doc_converter = DocumentConverter(
