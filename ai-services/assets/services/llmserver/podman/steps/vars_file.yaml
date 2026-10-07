@@ -1,4 +1,0 @@
-containers:
-  - name: "llm-{{ .InstanceSlug }}-llm"
-    format: ".Status"
-    alias: API_STATUS

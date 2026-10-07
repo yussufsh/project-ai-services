@@ -1038,10 +1038,13 @@ func (p *CatalogProvider) loadTemplatesFromPath(
 		return nil
 	})
 	if err != nil {
+		// If the directory simply doesn't exist, return an empty map rather than an error.
+		// Services with no templates of their own (e.g. those that only declare component
+		// dependencies) are valid and should not fail here.
+		if errors.Is(err, fs.ErrNotExist) {
+			return templates, nil
+		}
 		return nil, fmt.Errorf("failed to load %s: %w", operation, err)
-	}
-	if len(templates) == 0 {
-		return nil, fmt.Errorf("no %s found in %s", emptyKind, catalogPath)
 	}
 
 	return templates, nil
