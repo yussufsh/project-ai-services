@@ -3,3 +3,4 @@ model: ""
 apiKey: ""
 maxModelLen: 32768
 maxBatchSize: 32
+port: "8000"

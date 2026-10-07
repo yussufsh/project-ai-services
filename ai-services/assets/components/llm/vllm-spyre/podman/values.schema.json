@@ -31,6 +31,12 @@
       "title": "API key (optional)",
       "format": "password",
       "description": "Optional API key for securing the vLLM service. If provided, **store it securely**—you will need to enter this key when accessing the Question and Answer service. Leave empty to disable authentication."
+    },
+    "port": {
+      "type": "string",
+      "title": "Host port (optional)",
+      "description": "Host port to expose the vLLM inference API on the host machine (e.g. '8000'). Leave empty to not expose a host port.",
+      "default": "8000"
     }
   }
 }

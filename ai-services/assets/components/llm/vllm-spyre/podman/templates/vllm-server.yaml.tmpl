@@ -82,6 +82,9 @@ spec:
           memory: "200Gi"
       ports:
         - containerPort: 8000
+          {{- if .Values.port }}
+          hostPort: {{ .Values.port }}
+          {{- end }}
       volumeMounts:
         - mountPath: /models:z
           name: models
