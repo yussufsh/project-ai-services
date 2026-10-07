@@ -1,0 +1,55 @@
+# Service identification
+id: llmserver
+version: "1.0.0"
+name: "Large language model (LLM)"
+description: "Deploys a standalone vLLM inference server on CPU. Serves an instruct model via an OpenAI-compatible API endpoint for use by other services or direct programmatic access."
+type: service
+
+# Certification and support
+certified_by: "IBM"
+
+# Dependencies on other components
+dependencies:
+  - id: llm
+
+standalone: true
+
+# About field containing detailed service information
+about:
+  - title: "Service details"
+    sections:
+      - title: "Version"
+        value: "1.0.0"
+      - title: "Large language model (LLM)"
+        value: "granite-4.1-8b"
+      - title: "Inference backend"
+        values:
+          - "AI Inference on CPU"
+
+  - title: "Inputs and outputs"
+    sections:
+      - title: "Inputs"
+        values:
+          - "Prompt text via OpenAI-compatible chat completions API"
+      - title: "Outputs"
+        values:
+          - "Generated text response"
+
+  - title: "Expected resource consumption"
+    sections:
+      - title: "per deployment"
+        values:
+          - title: "Compute"
+            value: "10 CPU cores"
+          - title: "Memory"
+            value: "150 GB"
+          - title: "Storage"
+            value: "50 GB"
+
+  - title: "Assets"
+    sections:
+      - title: "Source code"
+        ctaLabel: "View source code"
+        url: "https://github.com/IBM/project-ai-services"
+
+# Made with Bob
