@@ -786,6 +786,9 @@ func (p *CatalogProvider) LoadServiceValues(serviceID string, argParams map[stri
 	if err := yaml.Unmarshal(processedData, &values); err != nil {
 		return nil, fmt.Errorf("failed to parse values.yaml: %w", err)
 	}
+	if values == nil {
+		values = make(map[string]any)
+	}
 
 	// Apply argParams overrides if provided
 	for key, val := range argParams {
@@ -838,6 +841,9 @@ func (p *CatalogProvider) LoadComponentValues(componentType, providerID string, 
 	values := make(map[string]any)
 	if err := yaml.Unmarshal(processedData, &values); err != nil {
 		return nil, fmt.Errorf("failed to parse values.yaml: %w", err)
+	}
+	if values == nil {
+		values = make(map[string]any)
 	}
 
 	// Apply argParams overrides if provided
