@@ -22,6 +22,11 @@
           "const": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
           "title": "Mistral-Small-3.2-24B-Instruct-2506",
           "description": "A 24b-parameter instruction-tuned LLM from Mistral AI. In this project, it powers tasks such as prompt-based reasoning, summarization, answer generation, and other LLM-driven functionalities.\n\n**Model strengths**: Strong instruction-following, multilingual support, and efficient inference at 24B scale.\n\n**Supported Languages**: English, French, German, Spanish, Italian, Portuguese, and more."
+        },
+        {
+          "const": "meta-llama/Llama-3.1-8B-Instruct",
+          "title": "Llama-3.1-8B-Instruct",
+          "description": "An 8b-parameter instruction-tuned LLM from Meta. In this project, it powers tasks such as prompt-based reasoning, summarization, answer generation, and other LLM-driven functionalities.\n\n**Model strengths**: Strong instruction-following, conversational ability, and reasoning at 8B scale.\n\n**Supported Languages**: English, German, French, Italian, Portuguese, Hindi, Spanish, and Thai."
         }
       ],
       "default": "ibm-granite/granite-4.1-8b-fp8"
